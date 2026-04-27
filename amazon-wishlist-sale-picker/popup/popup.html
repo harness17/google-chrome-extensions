@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+  <title>Wishlist Sale Picker</title>
+</head>
+<body>
+  <h1>Wishlist Sale Picker</h1>
+  <div class="row">
+    <label for="threshold">最低割引率: <span id="threshold-val">0</span>%</label>
+    <input id="threshold" type="range" min="0" max="90" step="5" value="0">
+  </div>
+  <p class="hint">0% にすると、セール表示があるすべての商品を抽出します。</p>
+  <p class="hint">設定はウィッシュリストページに即時反映されます。</p>
+  <p class="hint">ウィッシュリストページを開いた状態で、ページ上部の「セールのみ表示」ボタンをクリックしてください。</p>
+  <script src="popup.js"></script>
+</body>
+</html>

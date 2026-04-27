@@ -1,0 +1,22 @@
+# Node.js
+node_modules/
+.package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts（将来 esbuild 等を導入した場合）
+dist/
+build/
+
+# 環境設定
+.env
+*.local

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"console.log\\('manifest:', JSON.stringify\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('manifest.json','utf8'\\)\\), null, 2\\).slice\\(0,200\\)\\)\")",
+      "Bash(node --check content/content.js)",
+      "Bash(node --check popup/popup.js)",
+      "Bash(agent-browser open *)",
+      "Bash(agent-browser snapshot *)",
+      "Bash(node --check \"H:/ClaudeCode/GoogleChrome/content/content.js\")",
+      "Bash(npm ls *)",
+      "Bash(npm install *)",
+      "Bash(node verify-detect.mjs)",
+      "Bash(mkdir -p amazon-wishlist-sale-picker)",
+      "Bash(mv content *)",
+      "Bash(git -C . status)",
+      "Bash(git -C . remote -v)",
+      "Bash(where gh *)",
+      "Bash(grep -E \"\\\\.git$|\\\\.eslintrc|\\\\.prettierrc|biome\\\\.json\")"
+    ]
+  }
+}

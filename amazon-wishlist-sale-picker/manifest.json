@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Amazon Wishlist Sale Picker",
+  "version": "0.1.0",
+  "description": "Amazon.co.jp の欲しいものリストからセール中の商品だけを抽出します。",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Wishlist Sale Picker"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.amazon.co.jp/hz/wishlist/ls/*",
+        "https://www.amazon.co.jp/hz/wishlist/genericItemsPage/*",
+        "https://www.amazon.co.jp/gp/registry/wishlist/*"
+      ],
+      "js": ["shared/detect.js", "content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
