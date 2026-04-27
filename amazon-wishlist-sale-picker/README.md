@@ -78,6 +78,10 @@ amazon-wishlist-sale-picker/
 
 詳細: [fixtures/HOW_TO_CAPTURE.md](fixtures/HOW_TO_CAPTURE.md)
 
+## ロードマップ
+
+今後の開発計画は [ROADMAP.md](ROADMAP.md) を参照してください。
+
 ## ライセンス
 
 MIT
