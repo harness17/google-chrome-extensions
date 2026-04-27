@@ -7,6 +7,7 @@
   const STATE = {
     filterEnabled: false,
     minDiscountPercent: 0,
+    maxPrice: 0,
     saleCount: 0,
     fullyLoaded: false,
     isLoading: false,
@@ -15,21 +16,61 @@
   function scanItems() {
     const items = document.querySelectorAll('#g-items li[data-id]');
     let saleCount = 0;
-    items.forEach((item) => {
+    items.forEach((item, index) => {
+      // オリジナル順を初回のみ記録（lazy load で後から追加された分は次の番号で続く）
+      if (!item.dataset.wspOriginalIndex) {
+        item.dataset.wspOriginalIndex = String(index);
+      }
       try {
-        const { isSale, discountPercent } = detectSale(item);
+        const { isSale, discountPercent, currentPrice } = detectSale(item);
         item.dataset.wspSale = isSale ? '1' : '0';
         item.dataset.wspDiscount = String(discountPercent);
+        item.dataset.wspPrice = currentPrice != null ? String(currentPrice) : '';
         if (isSale) saleCount++;
       } catch (e) {
         console.warn('[WSP] detectSale failed for item', item, e);
-        // 例外時もデータセットを確定させてフィルター状態を一貫させる
         item.dataset.wspSale = '0';
         item.dataset.wspDiscount = '0';
+        item.dataset.wspPrice = '';
       }
     });
     STATE.saleCount = saleCount;
+    updateBadge(saleCount);
     return saleCount;
+  }
+
+  function updateBadge(count) {
+    try {
+      chrome.runtime.sendMessage({ type: 'setBadge', count });
+    } catch (e) {
+      // background が未起動などで失敗しても無視
+    }
+  }
+
+  function sortItems() {
+    const container = document.querySelector('#g-items');
+    if (!container) return;
+    const items = [...container.querySelectorAll(':scope > li[data-id]')];
+    items.sort((a, b) => {
+      const aSale = a.dataset.wspSale === '1';
+      const bSale = b.dataset.wspSale === '1';
+      if (aSale !== bSale) return aSale ? -1 : 1; // セール商品を先頭に
+      if (aSale && bSale) {
+        return parseInt(b.dataset.wspDiscount || '0', 10) - parseInt(a.dataset.wspDiscount || '0', 10);
+      }
+      return parseInt(a.dataset.wspOriginalIndex || '0', 10) - parseInt(b.dataset.wspOriginalIndex || '0', 10);
+    });
+    items.forEach((item) => container.appendChild(item));
+  }
+
+  function restoreOrder() {
+    const container = document.querySelector('#g-items');
+    if (!container) return;
+    const items = [...container.querySelectorAll(':scope > li[data-id]')];
+    items.sort((a, b) =>
+      parseInt(a.dataset.wspOriginalIndex || '0', 10) - parseInt(b.dataset.wspOriginalIndex || '0', 10)
+    );
+    items.forEach((item) => container.appendChild(item));
   }
 
   function applyFilter() {
@@ -37,11 +78,14 @@
     items.forEach((item) => {
       const isSale = item.dataset.wspSale === '1';
       const discount = parseInt(item.dataset.wspDiscount || '0', 10);
+      const price = item.dataset.wspPrice !== '' ? parseInt(item.dataset.wspPrice || '0', 10) : null;
       let hidden = false;
       if (STATE.filterEnabled) {
         if (!isSale) {
           hidden = true;
         } else if (STATE.minDiscountPercent > 0 && discount < STATE.minDiscountPercent) {
+          hidden = true;
+        } else if (STATE.maxPrice > 0 && price != null && price > STATE.maxPrice) {
           hidden = true;
         }
       }
@@ -102,6 +146,11 @@
     }
 
     STATE.filterEnabled = !STATE.filterEnabled;
+    if (STATE.filterEnabled) {
+      sortItems();
+    } else {
+      restoreOrder();
+    }
     applyFilter();
     updateUI();
   }
@@ -251,8 +300,11 @@
       return;
     } else if (STATE.filterEnabled && STATE.saleCount === 0) {
       status.textContent = 'セール中の商品はありません';
-    } else if (STATE.filterEnabled && STATE.minDiscountPercent > 0) {
-      status.textContent = `${STATE.minDiscountPercent}% 以上の割引で絞り込み中`;
+    } else if (STATE.filterEnabled) {
+      const parts = [];
+      if (STATE.minDiscountPercent > 0) parts.push(`${STATE.minDiscountPercent}% 以上`);
+      if (STATE.maxPrice > 0) parts.push(`¥${STATE.maxPrice.toLocaleString()} 以下`);
+      status.textContent = parts.length > 0 ? `${parts.join(' / ')} で絞り込み中` : '';
     } else {
       status.textContent = '';
     }
@@ -275,6 +327,7 @@
       const data = await chrome.storage.local.get(STORAGE_KEY);
       const s = data[STORAGE_KEY] || {};
       STATE.minDiscountPercent = Number(s.minDiscountPercent) || 0;
+      STATE.maxPrice = Number(s.maxPrice) || 0;
     } catch (e) {
       console.warn('[WSP] failed to load settings', e);
     }
@@ -315,6 +368,7 @@
     if (area === 'local' && changes[STORAGE_KEY]) {
       const s = changes[STORAGE_KEY].newValue || {};
       STATE.minDiscountPercent = Number(s.minDiscountPercent) || 0;
+      STATE.maxPrice = Number(s.maxPrice) || 0;
       applyFilter();
       updateUI();
     }

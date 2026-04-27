@@ -15,7 +15,7 @@ h1 {
 }
 
 .row {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 label {
@@ -30,6 +30,26 @@ label {
 }
 
 #threshold-val {
+  color: #c62828;
+  font-weight: 700;
+}
+
+#max-price {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  outline: none;
+}
+
+#max-price:focus {
+  border-color: #ffa41c;
+  box-shadow: 0 0 0 2px rgba(255, 164, 28, 0.25);
+}
+
+#max-price-val {
   color: #c62828;
   font-weight: 700;
 }
