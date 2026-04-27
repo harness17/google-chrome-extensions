@@ -23,6 +23,9 @@
         if (isSale) saleCount++;
       } catch (e) {
         console.warn('[WSP] detectSale failed for item', item, e);
+        // 例外時もデータセットを確定させてフィルター状態を一貫させる
+        item.dataset.wspSale = '0';
+        item.dataset.wspDiscount = '0';
       }
     });
     STATE.saleCount = saleCount;
@@ -149,7 +152,9 @@
         if (n > 0) return n;
       }
     }
-    return null;
+    // テキスト解析が外れた場合: 現在読み込まれている li 件数をフォールバックとして返す
+    const currentCount = document.querySelectorAll('#g-items li[data-id]').length;
+    return currentCount > 0 ? currentCount : null;
   }
 
   function waitForNewItems(timeoutMs = 800, settleMs = 80) {
@@ -228,14 +233,17 @@
     btn.disabled = STATE.isLoading;
 
     const label = btn.querySelector('.wsp-btn-label');
-    if (STATE.isLoading) {
-      label.textContent = '読み込み中...';
-    } else if (STATE.filterEnabled) {
-      label.textContent = '全件表示に戻す';
-    } else {
-      label.textContent = 'セールのみ表示';
+    if (label) {
+      if (STATE.isLoading) {
+        label.textContent = '読み込み中...';
+      } else if (STATE.filterEnabled) {
+        label.textContent = '全件表示に戻す';
+      } else {
+        label.textContent = 'セールのみ表示';
+      }
     }
-    document.getElementById('wsp-count').textContent = STATE.saleCount;
+    const countEl = document.getElementById('wsp-count');
+    if (countEl) countEl.textContent = STATE.saleCount;
 
     const status = document.getElementById('wsp-status');
     if (!status) return;
