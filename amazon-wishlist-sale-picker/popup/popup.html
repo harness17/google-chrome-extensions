@@ -8,18 +8,20 @@
 <body>
   <h1>Wishlist Sale Picker</h1>
 
-  <div class="row">
-    <label for="threshold">最低割引率: <span id="threshold-val">0</span>%</label>
-    <input id="threshold" type="range" min="0" max="90" step="5" value="0">
+  <div class="stats">
+    <div class="stat-item">
+      <span class="stat-label">セール商品数</span>
+      <span class="stat-value" id="sale-count">0</span>
+      <span class="stat-unit">件</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">最高割引率</span>
+      <span class="stat-value" id="max-discount">—</span>
+      <span class="stat-unit">%</span>
+    </div>
   </div>
 
-  <div class="row">
-    <label for="max-price">最高価格: <span id="max-price-val">無制限</span></label>
-    <input id="max-price" type="number" min="0" step="500" value="0" placeholder="0 = 無制限">
-  </div>
-
-  <p class="hint">設定はウィッシュリストページに即時反映されます。</p>
-  <p class="hint">「セールのみ表示」ボタンを押すと割引率の高い順に並び替えます。</p>
+  <p class="hint">ウィッシュリストページで設定値とソート方法を変更できます。</p>
   <script src="popup.js"></script>
 </body>
 </html>

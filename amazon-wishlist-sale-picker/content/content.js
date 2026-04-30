@@ -11,6 +11,7 @@
     saleCount: 0,
     fullyLoaded: false,
     isLoading: false,
+    sortMethod: 'discount-desc', // discount-desc | discount-asc | price-asc | price-desc
   };
 
   function scanItems() {
@@ -36,7 +37,32 @@
     });
     STATE.saleCount = saleCount;
     updateBadge(saleCount);
+    updateSettingsPanel();
+    notifyPopup();
     return saleCount;
+  }
+
+  function calculateStats() {
+    const items = document.querySelectorAll('#g-items li[data-id]');
+    let maxDiscount = 0;
+    items.forEach((item) => {
+      if (item.dataset.wspSale === '1') {
+        const discount = parseInt(item.dataset.wspDiscount || '0', 10);
+        maxDiscount = Math.max(maxDiscount, discount);
+      }
+    });
+    return { saleCount: STATE.saleCount, maxDiscount };
+  }
+
+  function notifyPopup() {
+    try {
+      const stats = calculateStats();
+      chrome.runtime.sendMessage({ type: 'statsUpdated', ...stats }).catch(() => {
+        // popup が未開状態で失敗しても無視
+      });
+    } catch (e) {
+      // error 無視
+    }
   }
 
   function updateBadge(count) {
@@ -55,8 +81,28 @@
       const aSale = a.dataset.wspSale === '1';
       const bSale = b.dataset.wspSale === '1';
       if (aSale !== bSale) return aSale ? -1 : 1; // セール商品を先頭に
+
       if (aSale && bSale) {
-        return parseInt(b.dataset.wspDiscount || '0', 10) - parseInt(a.dataset.wspDiscount || '0', 10);
+        const aDiscount = parseInt(a.dataset.wspDiscount || '0', 10);
+        const bDiscount = parseInt(b.dataset.wspDiscount || '0', 10);
+        const aPrice = a.dataset.wspPrice !== '' ? parseInt(a.dataset.wspPrice || '0', 10) : null;
+        const bPrice = b.dataset.wspPrice !== '' ? parseInt(b.dataset.wspPrice || '0', 10) : null;
+
+        switch (STATE.sortMethod) {
+          case 'discount-asc':
+            return aDiscount - bDiscount;
+          case 'price-asc':
+            if (aPrice == null) return 1;
+            if (bPrice == null) return -1;
+            return aPrice - bPrice;
+          case 'price-desc':
+            if (aPrice == null) return 1;
+            if (bPrice == null) return -1;
+            return bPrice - aPrice;
+          case 'discount-desc':
+          default:
+            return bDiscount - aDiscount;
+        }
       }
       return parseInt(a.dataset.wspOriginalIndex || '0', 10) - parseInt(b.dataset.wspOriginalIndex || '0', 10);
     });
@@ -110,16 +156,81 @@
     const container = document.createElement('div');
     container.id = 'wsp-controls';
     container.innerHTML = `
-      <button id="wsp-toggle-btn" class="wsp-btn" type="button">
-        <span class="wsp-btn-label">セールのみ表示</span>
-        (<span id="wsp-count">0</span>件)
-      </button>
-      <span id="wsp-status" class="wsp-status"></span>
+      <div class="wsp-controls-row">
+        <button id="wsp-toggle-btn" class="wsp-btn" type="button">
+          <span class="wsp-btn-label">セールのみ表示</span>
+          (<span id="wsp-count">0</span>件)
+        </button>
+        <span id="wsp-status" class="wsp-status"></span>
+      </div>
+      <div class="wsp-filter-settings">
+        <div class="wsp-setting-row">
+          <label for="wsp-discount-input" class="wsp-setting-label">最低割引率:</label>
+          <div class="wsp-setting-input-group">
+            <input id="wsp-discount-input" type="range" min="0" max="90" step="5" value="0" class="wsp-range-input">
+            <span id="wsp-discount-value" class="wsp-setting-value">0</span>
+            <span class="wsp-setting-unit">%</span>
+          </div>
+        </div>
+        <div class="wsp-setting-row">
+          <label for="wsp-price-input" class="wsp-setting-label">最高価格:</label>
+          <div class="wsp-setting-input-group">
+            <input id="wsp-price-input" type="number" min="0" step="500" value="0" class="wsp-number-input" placeholder="0=制限なし">
+            <span class="wsp-setting-unit">¥</span>
+          </div>
+        </div>
+      </div>
+      <div id="wsp-sort-controls" class="wsp-sort-controls" style="display: none;">
+        <label for="wsp-sort-select" class="wsp-sort-label">ソート:</label>
+        <select id="wsp-sort-select" class="wsp-sort-select">
+          <option value="discount-desc">割引率: 高い順</option>
+          <option value="discount-asc">割引率: 低い順</option>
+          <option value="price-asc">価格: 安い順</option>
+          <option value="price-desc">価格: 高い順</option>
+        </select>
+      </div>
     `;
     target.appendChild(container);
 
     document.getElementById('wsp-toggle-btn').addEventListener('click', onToggleClick);
+
+    const discountInput = document.getElementById('wsp-discount-input');
+    const discountValue = document.getElementById('wsp-discount-value');
+    discountInput.addEventListener('input', (e) => {
+      discountValue.textContent = e.target.value;
+    });
+    discountInput.addEventListener('change', () => saveSettingsFromUI());
+
+    const priceInput = document.getElementById('wsp-price-input');
+    priceInput.addEventListener('change', () => saveSettingsFromUI());
+
+    document.getElementById('wsp-sort-select').addEventListener('change', (e) => {
+      STATE.sortMethod = e.target.value;
+      if (STATE.filterEnabled) {
+        sortItems();
+      }
+    });
+
+    // 初期値をUIに反映
+    discountInput.value = STATE.minDiscountPercent;
+    discountValue.textContent = STATE.minDiscountPercent;
+    priceInput.value = STATE.maxPrice;
+
     return true;
+  }
+
+  function saveSettingsFromUI() {
+    const minDiscountPercent = parseInt(document.getElementById('wsp-discount-input').value, 10);
+    const maxPrice = parseInt(document.getElementById('wsp-price-input').value, 10) || 0;
+    STATE.minDiscountPercent = minDiscountPercent;
+    STATE.maxPrice = maxPrice;
+    chrome.storage.local.set({
+      [STORAGE_KEY]: { minDiscountPercent, maxPrice },
+    }).catch((e) => console.warn('[WSP] failed to save settings', e));
+  }
+
+  function updateSettingsPanel() {
+    // 設定UIは常に表示されているので不要
   }
 
   async function onToggleClick() {
@@ -148,10 +259,15 @@
     STATE.filterEnabled = !STATE.filterEnabled;
     if (STATE.filterEnabled) {
       sortItems();
+      const sortControls = document.getElementById('wsp-sort-controls');
+      if (sortControls) sortControls.style.display = 'flex';
     } else {
       restoreOrder();
+      const sortControls = document.getElementById('wsp-sort-controls');
+      if (sortControls) sortControls.style.display = 'none';
     }
     applyFilter();
+    updateSettingsPanel();
     updateUI();
   }
 
@@ -370,7 +486,15 @@
       STATE.minDiscountPercent = Number(s.minDiscountPercent) || 0;
       STATE.maxPrice = Number(s.maxPrice) || 0;
       applyFilter();
+      updateSettingsPanel();
       updateUI();
+    }
+  });
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'getStats') {
+      const stats = calculateStats();
+      sendResponse(stats);
     }
   });
 

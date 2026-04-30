@@ -1,45 +1,33 @@
-const STORAGE_KEY = 'wsp_settings';
+async function updateStats() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (!tab?.id) return;
 
-function formatPrice(value) {
-  if (!value || value <= 0) return '無制限';
-  return `¥${Number(value).toLocaleString('ja-JP')}`;
-}
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'getStats' }).catch(() => null);
+    if (!response) {
+      document.getElementById('sale-count').textContent = '—';
+      document.getElementById('max-discount').textContent = '—';
+      return;
+    }
 
-async function load() {
-  const data = await chrome.storage.local.get(STORAGE_KEY);
-  const s = data[STORAGE_KEY] || {};
-
-  const discount = Number(s.minDiscountPercent) || 0;
-  document.getElementById('threshold').value = discount;
-  document.getElementById('threshold-val').textContent = discount;
-
-  const maxPrice = Number(s.maxPrice) || 0;
-  document.getElementById('max-price').value = maxPrice;
-  document.getElementById('max-price-val').textContent = formatPrice(maxPrice);
-}
-
-async function save() {
-  const minDiscountPercent = parseInt(document.getElementById('threshold').value, 10);
-  const maxPrice = parseInt(document.getElementById('max-price').value, 10) || 0;
-  await chrome.storage.local.set({
-    [STORAGE_KEY]: { minDiscountPercent, maxPrice },
-  });
+    document.getElementById('sale-count').textContent = response.saleCount || 0;
+    if (response.maxDiscount > 0) {
+      document.getElementById('max-discount').textContent = response.maxDiscount;
+    } else {
+      document.getElementById('max-discount').textContent = '—';
+    }
+  } catch (e) {
+    console.warn('[WSP popup] failed to get stats', e);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  load();
-
-  const range = document.getElementById('threshold');
-  const rangeVal = document.getElementById('threshold-val');
-  range.addEventListener('input', (e) => {
-    rangeVal.textContent = e.target.value;
+  updateStats();
+  // content script からの統計更新通知をリッスン
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'statsUpdated') {
+      updateStats();
+    }
   });
-  range.addEventListener('change', () => save());
-
-  const priceInput = document.getElementById('max-price');
-  const priceVal = document.getElementById('max-price-val');
-  priceInput.addEventListener('input', (e) => {
-    priceVal.textContent = formatPrice(e.target.value);
-  });
-  priceInput.addEventListener('change', () => save());
 });
