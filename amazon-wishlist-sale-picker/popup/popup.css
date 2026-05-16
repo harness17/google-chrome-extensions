@@ -55,3 +55,31 @@ h1 {
   margin: 0;
   line-height: 1.4;
 }
+
+.cross-scan {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.cross-scan-btn {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: #ffa41c;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.cross-scan-btn:hover:not(:disabled) {
+  background: #f5980a;
+}
+
+.cross-scan-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}

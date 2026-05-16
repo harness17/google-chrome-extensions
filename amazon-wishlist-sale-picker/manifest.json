@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Amazon Wishlist Sale Picker",
-  "version": "0.3.0",
-  "description": "Amazon.co.jp の欲しいものリストからセール中の商品だけを抽出します。",
+  "version": "0.4.0",
+  "description": "Amazon.co.jp の欲しいものリストからセール中の商品だけを抽出します。複数リストの横断スキャンに対応。",
   "background": {
     "service_worker": "background.js"
   },

@@ -55,6 +55,19 @@ amazon.com など他ドメインはスコープ外。商品詳細ページ (`/dp
 - 連続 2 回新規追加なし、または最大 80 回スクロールで終了
 - 完了後、元のスクロール位置に戻す
 
+## 横断セール確認（複数ウィッシュリスト横断スキャン）
+
+popup の「全リスト横断スキャン」から、ユーザーの全ウィッシュリストを順にスキャンしてセール商品を集約する。
+
+- popup → content script `enumerateLists` でサイドバーから全リストを列挙
+- popup → background `startCrossScan` でスキャン開始
+- background が各リストを**バックグラウンドタブ**で順に開き、`scanList` メッセージで content script に全件読み込み + セール判定を依頼（`runHeadlessScan`）
+- 結果は `results/results.html` にリスト別集約表示
+
+メッセージ種別: `enumerateLists` / `scanList` / `wspPing`（content script）、`startCrossScan` / `getCrossScanState` / `crossScanUpdated`（background）。
+
+バックグラウンドタブはタイマーがスロットリングされるため、`loadAllItems(_, {headless:true})` で新規アイテム待ち時間を延長している。
+
 ## 既知の制約
 
 - アイコン PNG は仮置き（オレンジ + 白の `%`）。本番公開時は差し替え推奨

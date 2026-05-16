@@ -357,9 +357,26 @@
     });
   }
 
-  async function loadAllItems(onProgress) {
+  /** ページが可視（document.hidden === false）になるまで待つ。 */
+  function waitUntilVisible() {
+    if (!document.hidden) return Promise.resolve();
+    return new Promise((resolve) => {
+      const onVis = () => {
+        if (!document.hidden) {
+          document.removeEventListener('visibilitychange', onVis);
+          resolve();
+        }
+      };
+      document.addEventListener('visibilitychange', onVis);
+    });
+  }
+
+  async function loadAllItems(onProgress, opts = {}) {
     const MAX_ITERATIONS = 80;
     const STABLE_THRESHOLD = 2;
+    // 可視タブでも初動に少し余裕を持たせる
+    const newItemTimeout = opts.headless ? 1500 : 600;
+    const newItemSettle = opts.headless ? 250 : 80;
 
     const countItems = () => document.querySelectorAll('#g-items li[data-id]').length;
     let lastCount = countItems();
@@ -368,6 +385,9 @@
     onProgress?.(lastCount);
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
+      // 遅延ロードは可視状態でないと発火しないため、隠れていたら可視に戻るまで待つ
+      if (opts.headless) await waitUntilVisible();
+
       const endMarker = document.querySelector('#endOfListMarker');
       if (endMarker) {
         endMarker.scrollIntoView({ block: 'end' });
@@ -375,7 +395,7 @@
         window.scrollTo(0, document.documentElement.scrollHeight);
       }
 
-      await waitForNewItems(600, 80);
+      await waitForNewItems(newItemTimeout, newItemSettle);
 
       const currentCount = countItems();
       onProgress?.(currentCount);
@@ -491,10 +511,130 @@
     }
   });
 
+  // --- 横断セール確認（複数ウィッシュリスト横断スキャン）用 ---
+
+  /**
+   * サイドバー・各種リンクから、ユーザーが持つウィッシュリストを列挙する。
+   * @returns {{id: string, name: string, url: string}[]}
+   */
+  function enumerateLists() {
+    const links = document.querySelectorAll(
+      'a[href*="/hz/wishlist/ls/"], a[href*="/hz/wishlist/genericItemsPage/"]'
+    );
+    const map = new Map();
+    links.forEach((a) => {
+      const m = (a.href || '').match(/\/hz\/wishlist\/(?:ls|genericItemsPage)\/([A-Za-z0-9]+)/);
+      if (!m) return;
+      const id = m[1];
+      const name = (a.textContent || '').trim().replace(/\s+/g, ' ');
+      if (!name || name.length > 80) return;
+      if (!map.has(id)) {
+        map.set(id, { id, name, url: `https://www.amazon.co.jp/hz/wishlist/ls/${id}` });
+      }
+    });
+    // サイドバーに current list が別マークアップで出る場合に備え、URL から確実に追加する
+    const cur = location.pathname.match(
+      /\/hz\/wishlist\/(?:ls|genericItemsPage)\/([A-Za-z0-9]+)/
+    );
+    if (cur) {
+      const id = cur[1];
+      if (!map.has(id)) {
+        const curName =
+          (document.querySelector('#profile-list-name')?.textContent || '').trim() ||
+          'このリスト';
+        map.set(id, { id, name: curName, url: `https://www.amazon.co.jp/hz/wishlist/ls/${id}` });
+      }
+    }
+    return [...map.values()];
+  }
+
+  /** セール判定済みの商品から、結果ページ表示用のデータを収集する。 */
+  function collectSaleItems() {
+    const items = document.querySelectorAll('#g-items li[data-id]');
+    const result = [];
+    items.forEach((item) => {
+      if (item.dataset.wspSale !== '1') return;
+      const link =
+        item.querySelector('a[id^="itemName_"]') ||
+        item.querySelector('h2 a, h3 a, .a-link-normal[title]');
+      const img = item.querySelector('img');
+      const priceStr = item.dataset.wspPrice;
+      result.push({
+        title: (link?.textContent || link?.getAttribute('title') || '(商品名不明)').trim(),
+        url: link?.href || '',
+        image: img?.src || '',
+        discount: parseInt(item.dataset.wspDiscount || '0', 10),
+        price: priceStr !== '' && priceStr != null ? parseInt(priceStr, 10) : null,
+      });
+    });
+    return result;
+  }
+
+  /** #g-items が現れるまで待つ。 */
+  function waitForContainer(timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector('#g-items')) return resolve();
+      const obs = new MutationObserver(() => {
+        if (document.querySelector('#g-items')) {
+          obs.disconnect();
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+      const timer = setTimeout(() => {
+        obs.disconnect();
+        reject(new Error('商品リストが見つかりませんでした'));
+      }, timeoutMs);
+    });
+  }
+
+  let headlessScanPromise = null;
+  /** バックグラウンドタブで全件読み込み + セール判定し、セール商品を返す。 */
+  async function runHeadlessScan() {
+    if (headlessScanPromise) return headlessScanPromise;
+    headlessScanPromise = (async () => {
+      await waitForContainer();
+      // スキャン用ウィンドウに進捗オーバーレイを表示（次のリストへ遷移するまで出したまま）
+      showOverlay();
+      const totalEstimate = getTotalItemCount();
+      updateOverlayProgress(0, totalEstimate);
+      await loadAllItems(
+        (count) => updateOverlayProgress(count, totalEstimate),
+        { headless: true }
+      );
+      scanItems();
+      return { items: collectSaleItems() };
+    })();
+    try {
+      return await headlessScanPromise;
+    } finally {
+      headlessScanPromise = null;
+    }
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'getStats') {
-      const stats = calculateStats();
-      sendResponse(stats);
+      sendResponse(calculateStats());
+      return;
+    }
+    if (msg.type === 'wspPing') {
+      sendResponse({ ok: true });
+      return;
+    }
+    if (msg.type === 'enumerateLists') {
+      try {
+        sendResponse({ lists: enumerateLists() });
+      } catch (e) {
+        sendResponse({ lists: [], error: String(e) });
+      }
+      return;
+    }
+    if (msg.type === 'scanList') {
+      runHeadlessScan()
+        .then((r) => sendResponse(r))
+        .catch((e) => sendResponse({ error: String((e && e.message) || e) }));
+      return true; // 非同期レスポンス
     }
   });
 
