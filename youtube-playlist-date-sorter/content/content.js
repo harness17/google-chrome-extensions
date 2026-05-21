@@ -564,6 +564,7 @@
   function clearDecorations() {
     for (const row of getPlaylistRows()) {
       row.classList.remove('ytpds-current-video');
+      row.classList.remove('ytpds-badge-overlay');
       if (row.dataset.ytpdsSorted) {
         delete row.dataset.ytpdsSorted;
       }
@@ -582,6 +583,7 @@
         'ytd-playlist-panel-video-renderer, ytd-playlist-panel-video-wrapper-renderer, ytd-playlist-video-renderer, ytd-rich-item-renderer, a[href*="/watch"][href*="v="]'
       );
       if (!row || !decoratedRows.has(row) || row.dataset.ytpdsSorted !== '1') {
+        if (row) row.classList.remove('ytpds-badge-overlay');
         badge.remove();
       }
     }
@@ -589,14 +591,33 @@
 
   function ensureBadge(row) {
     let badge = row.querySelector('.ytpds-date-badge');
-    if (badge) return badge;
+    const badgeTarget = getBadgeTarget(row);
 
-    badge = document.createElement('span');
-    badge.className = 'ytpds-date-badge';
-    const target =
-      row.querySelector('#meta, #byline-container, #video-info, .metadata, #video-title') || row;
-    target.appendChild(badge);
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'ytpds-date-badge';
+    }
+    row.classList.toggle('ytpds-badge-overlay', badgeTarget.overlay);
+    if (badge.parentElement !== badgeTarget.target) {
+      badgeTarget.target.appendChild(badge);
+    }
     return badge;
+  }
+
+  function getBadgeTarget(row) {
+    const isWatchPanelRow =
+      row.matches &&
+      row.matches('ytd-playlist-panel-video-renderer, ytd-playlist-panel-video-wrapper-renderer');
+    const target = row.querySelector(
+      isWatchPanelRow
+        ? '#meta, .metadata-wrapper, .metadata-info, #byline-container, #byline, #video-info, #details, .metadata'
+        : '#meta, #byline-container, #video-info, .metadata, #video-title'
+    );
+
+    if (target) {
+      return { target, overlay: false };
+    }
+    return { target: row, overlay: isWatchPanelRow };
   }
 
   function ensureVisualObserver() {

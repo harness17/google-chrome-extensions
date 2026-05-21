@@ -190,6 +190,26 @@ Pop-Location
 - 残リスク:
   - YouTube 実 DOM での SPA 遷移中 1 秒猶予と、`list=` なし `/watch` での非表示はユーザー実機確認が必要。
 
+#### Codex 対応状況（バッジ表示バグ修正）（2026-05-21）
+
+- 方針:
+  - フォールバック降格ではなく、`/watch?v=...&list=...` の並び替えボタン押下後にサイドプレイリストへバッジを表示するフル対応。
+- 対応内容:
+  - `/watch` サイドバー行では `#video-title` への挿入を避け、`#meta` / `.metadata-wrapper` / `.metadata-info` / `#byline` 系の可視メタ領域へバッジを追加。
+  - メタ領域が見つからない `ytd-playlist-panel-video-renderer` / wrapper 行では `ytpds-badge-overlay` を付け、行直下に絶対配置でバッジを表示。
+  - fixture `watch-page.html` にサイドプレイリスト行の最小構造を追加し、verify で watch panel fixture と CSS fallback の存在を確認。
+- 変更ファイル:
+  - `youtube-playlist-date-sorter/content/content.js`
+  - `youtube-playlist-date-sorter/content/content.css`
+  - `youtube-playlist-date-sorter/fixtures/watch-page.html`
+  - `youtube-playlist-date-sorter/verify-date-sorter.mjs`
+  - `CLAUDE_CODE_HANDOFF.md`
+- verify:
+  - ✅ `cd youtube-playlist-date-sorter && node ./verify-date-sorter.mjs` → `date sorter verification passed`
+  - ✅ `cd youtube-playlist-date-sorter && node --check ./content/content.js`
+- 残リスク:
+  - YouTube 実 DOM で `.metadata-wrapper` などの実在パターンと overlay fallback の視認性は、拡張を読み込んだユーザー実機で最終確認が必要。
+
 ---
 
 ## 2026-05-17 11:20 追記（cross-agent-harness 初期導入 — Codex 作成）

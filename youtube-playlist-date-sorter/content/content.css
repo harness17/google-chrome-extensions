@@ -140,6 +140,10 @@ ytd-playlist-video-renderer[data-ytpds-sorted='1'] {
   position: relative;
 }
 
+ytd-playlist-panel-video-wrapper-renderer[data-ytpds-sorted='1'] {
+  position: relative;
+}
+
 ytd-playlist-panel-video-renderer.ytpds-current-video,
 ytd-playlist-video-renderer.ytpds-current-video {
   outline: 2px solid #0f766e;
@@ -162,4 +166,16 @@ ytd-playlist-video-renderer.ytpds-current-video {
   font-size: 11px;
   line-height: 1.35;
   white-space: normal;
+}
+
+ytd-playlist-panel-video-renderer.ytpds-badge-overlay > .ytpds-date-badge,
+ytd-playlist-panel-video-wrapper-renderer.ytpds-badge-overlay > .ytpds-date-badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 20;
+  max-width: calc(100% - 16px);
+  margin-top: 0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
 }
