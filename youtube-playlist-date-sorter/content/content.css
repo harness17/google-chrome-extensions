@@ -108,6 +108,15 @@
   line-height: 1.35;
 }
 
+.ytpds-debug {
+  margin-top: 6px;
+  color: #64748b;
+  font-family: Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .ytpds-progress {
   margin-top: 10px;
 }

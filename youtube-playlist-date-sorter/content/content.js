@@ -50,6 +50,7 @@
   function renderStatus() {
     const node = state.panel && state.panel.querySelector('[data-ytpds-status]');
     if (node) node.textContent = state.statusRenderer ? state.statusRenderer() : t('ready');
+    renderDebug();
   }
 
   function setStatusKey(key, ...args) {
@@ -60,6 +61,42 @@
   function setSummaryStatus() {
     state.statusRenderer = () => buildSummaryText();
     renderStatus();
+  }
+
+  function isDebugEnabled() {
+    try {
+      return localStorage.getItem('ytpds:debug') === '1';
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function debugLog(message, details) {
+    if (!isDebugEnabled()) return;
+    console.info('[ytpds]', message, details || '');
+  }
+
+  function setDebug(message, details) {
+    state.lastFetchDebug = message;
+    debugLog(message, details);
+    renderDebug();
+  }
+
+  function renderDebug() {
+    const node = state.panel && state.panel.querySelector('[data-ytpds-debug]');
+    if (!node) return;
+    const enabled = isDebugEnabled();
+    node.hidden = !enabled;
+    if (!enabled) return;
+    const rows = getPlaylistRows();
+    const badgeCount = document.querySelectorAll('.ytpds-date-badge').length;
+    node.textContent = [
+      state.lastFetchDebug || 'debug ready',
+      `badges=${badgeCount}`,
+      `rows=${rows.length}`,
+      `enabled=${state.badgesEnabled}`,
+      `mode=${state.visualMode}`,
+    ].join(' | ');
   }
 
   function refreshPanelText() {
@@ -79,10 +116,13 @@
     }
     if (order) {
       order.setAttribute('aria-label', t('orderLabel'));
+      const native = order.querySelector('option[value="native"]');
       const asc = order.querySelector('option[value="asc"]');
       const desc = order.querySelector('option[value="desc"]');
+      if (native) native.textContent = t('normalOrder');
       if (asc) asc.textContent = t('oldestFirst');
       if (desc) desc.textContent = t('newestFirst');
+      if (order.value !== state.order) order.value = state.order;
     }
     if (sortButton) sortButton.textContent = state.loading ? t('sorting') : t('sort');
     if (nextButton) nextButton.textContent = t('next');
@@ -127,6 +167,7 @@
       </div>
       <div class="ytpds-body" data-ytpds-body>
         <select class="ytpds-select" data-ytpds-order>
+          <option value="native"></option>
           <option value="asc"></option>
           <option value="desc"></option>
         </select>
@@ -144,6 +185,7 @@
           <div class="ytpds-progress-label" data-ytpds-progress-label></div>
         </div>
         <div class="ytpds-status" data-ytpds-status></div>
+        <div class="ytpds-debug" data-ytpds-debug hidden></div>
       </div>
     `;
 
@@ -153,7 +195,18 @@
       saveSettings();
     });
     panel.querySelector('[data-ytpds-order]').addEventListener('change', (event) => {
-      state.order = event.target.value === 'desc' ? 'desc' : 'asc';
+      const nextOrder =
+        event.target.value === 'native'
+          ? 'native'
+          : event.target.value === 'desc'
+            ? 'desc'
+            : 'asc';
+      state.order = nextOrder;
+      if (nextOrder === 'native') {
+        restoreNativeOrder();
+        clearSortState();
+        return;
+      }
       if (state.sortedItems.length > 0) {
         state.sortedItems = sorter.sortItemsByPublishDate(
           state.sortedItems,
@@ -197,7 +250,7 @@
         ensurePanel();
       }
     });
-    state.panelObserver.observe(document.documentElement, { childList: true });
+    state.panelObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   function setLoading(isLoading, phaseKey, current, total) {
@@ -273,6 +326,16 @@
 
   async function refreshSortedItems() {
     if (state.loading) return;
+    if (state.order === 'native') {
+      restoreNativeOrder();
+      await clearSortState();
+      return;
+    }
+    debugLog('sort clicked', {
+      url: location.href,
+      playlistId: sorter.getPlaylistIdFromUrl(location.href),
+      rows: getPlaylistRows().length,
+    });
     ensurePanel();
 
     setLoading(true, 'waitingPhase', 0, 0);
@@ -301,6 +364,7 @@
     await saveSortState();
     setLoading(false);
     setSummaryStatus();
+    renderDebug();
   }
 
   async function waitForPlaylistItems() {
@@ -425,7 +489,7 @@
   }
 
   function applyVisualOrder() {
-    if (state.applyingVisualOrder || state.sortedItems.length === 0) return;
+    if (state.applyingVisualOrder || state.sortedItems.length === 0 || state.order === 'native') return;
 
     const rows = getPlaylistRows();
     if (rows.length === 0) return;
@@ -442,14 +506,24 @@
       .map((item) => rowByVideoId.get(item.videoId))
       .filter(Boolean);
     if (sortedRows.length === 0) {
-      state.lastFetchDebug = `visual rows=${rows.length}, matched=0`;
+      setDebug(`visual rows=${rows.length}, matched=0`, {
+        desired: state.sortedItems.map((item) => item.videoId).slice(0, 10),
+        actual: rows.map((row) => getVideoIdFromRow(row)).slice(0, 10),
+      });
       setSummaryStatus();
       return;
     }
 
     const parent = sortedRows[0].parentElement;
     if (!parent || sortedRows.some((row) => row.parentElement !== parent)) {
-      state.lastFetchDebug = `visual rows=${rows.length}, matched=${sortedRows.length}, mixed parents`;
+      if (state.badgesEnabled) {
+        decorateRows(rowByVideoId);
+        setDebug(`visual rows=${rows.length}, matched=${sortedRows.length}, mixed parents, decorated`, {
+          badgeCount: document.querySelectorAll('.ytpds-date-badge').length,
+        });
+      } else {
+        setDebug(`visual rows=${rows.length}, matched=${sortedRows.length}, mixed parents`);
+      }
       setSummaryStatus();
       return;
     }
@@ -461,14 +535,20 @@
       .filter((item) => rowByVideoId.has(item.videoId))
       .map((item) => item.videoId);
     if (sameOrder(currentOrder, desiredOrder)) {
-      safelyDecorateRows(rowByVideoId);
-      state.lastFetchDebug = `visual rows=${rows.length}, matched=${sortedRows.length}, already sorted`;
+      if (state.badgesEnabled) {
+        decorateRows(rowByVideoId);
+      } else {
+        safelyDecorateRows(rowByVideoId);
+      }
+      setDebug(`visual rows=${rows.length}, matched=${sortedRows.length}, already sorted`, {
+        badgeCount: document.querySelectorAll('.ytpds-date-badge').length,
+      });
       return;
     }
 
     if (!state.badgesEnabled && state.visualMode !== 'sorted' && !state.forceOrderWithoutBadges) {
       state.badgesEnabled = false;
-      state.lastFetchDebug = `visual rows=${rows.length}, matched=${sortedRows.length}, native order detected`;
+      setDebug(`visual rows=${rows.length}, matched=${sortedRows.length}, native order detected`);
       setSummaryStatus();
       return;
     }
@@ -485,7 +565,9 @@
       }
       marker.remove();
       decorateRows(rowByVideoId);
-      state.lastFetchDebug = `visual rows=${rows.length}, matched=${sortedRows.length}, sorted`;
+      setDebug(`visual rows=${rows.length}, matched=${sortedRows.length}, sorted`, {
+        badgeCount: document.querySelectorAll('.ytpds-date-badge').length,
+      });
     } finally {
       setTimeout(() => {
         state.applyingVisualOrder = false;
@@ -508,7 +590,8 @@
     }
     const currentVideoId = sorter.getVideoIdFromUrl(location.href);
     const desiredVideoIds = new Set(state.sortedItems.map((item) => item.videoId));
-    const decoratedRows = new Set();
+    const decoratedVideoIds = new Set();
+    let attempted = 0;
     for (const row of getPlaylistRows()) {
       const videoId = getVideoIdFromRow(row);
       if (!desiredVideoIds.has(videoId) && row.dataset.ytpdsSorted === '1') {
@@ -522,7 +605,8 @@
     state.sortedItems.forEach((item, index) => {
       const row = rowByVideoId.get(item.videoId);
       if (!row) return;
-      decoratedRows.add(row);
+      decoratedVideoIds.add(item.videoId);
+      attempted += 1;
 
       const isCurrent = item.videoId === currentVideoId;
       if (row.classList.contains('ytpds-current-video') !== isCurrent) {
@@ -546,7 +630,14 @@
         badge.textContent = badgeText;
       }
     });
-    pruneOrphanBadges(decoratedRows);
+    const beforePrune = document.querySelectorAll('.ytpds-date-badge').length;
+    pruneOrphanBadges(decoratedVideoIds);
+    debugLog('decorate rows', {
+      attempted,
+      decoratedVideoIds: decoratedVideoIds.size,
+      beforePrune,
+      afterPrune: document.querySelectorAll('.ytpds-date-badge').length,
+    });
   }
 
   function safelyDecorateRows(rowByVideoId) {
@@ -577,12 +668,87 @@
     }
   }
 
-  function pruneOrphanBadges(decoratedRows) {
+  function restoreNativeOrder() {
+    state.badgesEnabled = false;
+    state.visualMode = 'idle';
+    applyOrderByItems(
+      [...state.sortedItems].sort((left, right) => left.originalIndex - right.originalIndex),
+      'native order'
+    );
+    clearDecorations();
+    setStatusKey('nativeRestored');
+  }
+
+  function applyOrderByItems(items, reason) {
+    if (state.applyingVisualOrder || items.length === 0) return false;
+    const rows = getPlaylistRows();
+    if (rows.length === 0) return false;
+
+    const rowByVideoId = new Map();
+    for (const row of rows) {
+      const videoId = getVideoIdFromRow(row);
+      if (videoId && !rowByVideoId.has(videoId)) {
+        rowByVideoId.set(videoId, row);
+      }
+    }
+
+    const desiredOrder = items
+      .map((item) => item.videoId)
+      .filter((videoId) => rowByVideoId.has(videoId));
+    if (desiredOrder.length === 0) return false;
+
+    const sortedRows = desiredOrder.map((videoId) => rowByVideoId.get(videoId)).filter(Boolean);
+    const parent = sortedRows[0] && sortedRows[0].parentElement;
+    if (!parent || sortedRows.some((row) => row.parentElement !== parent)) {
+      debugLog(`${reason} skipped`, {
+        rows: rows.length,
+        matched: sortedRows.length,
+        cause: 'mixed parents',
+      });
+      return false;
+    }
+
+    const currentOrder = Array.from(parent.children)
+      .filter((node) => rowByVideoId.has(getVideoIdFromRow(node)))
+      .map((node) => getVideoIdFromRow(node));
+    if (sameOrder(currentOrder, desiredOrder)) {
+      debugLog(`${reason} already applied`, {
+        rows: rows.length,
+        matched: sortedRows.length,
+      });
+      return true;
+    }
+
+    state.applyingVisualOrder = true;
+    try {
+      const marker = document.createComment('ytpds-native-order-marker');
+      parent.insertBefore(marker, sortedRows[0]);
+      for (let i = desiredOrder.length - 1; i >= 0; i -= 1) {
+        const row = rowByVideoId.get(desiredOrder[i]);
+        if (row && row.parentElement === parent) {
+          parent.insertBefore(row, marker.nextSibling);
+        }
+      }
+      marker.remove();
+      debugLog(`${reason} applied`, {
+        rows: rows.length,
+        matched: sortedRows.length,
+      });
+      return true;
+    } finally {
+      setTimeout(() => {
+        state.applyingVisualOrder = false;
+      }, 300);
+    }
+  }
+
+  function pruneOrphanBadges(decoratedVideoIds) {
     for (const badge of document.querySelectorAll('.ytpds-date-badge')) {
       const row = badge.closest(
         'ytd-playlist-panel-video-renderer, ytd-playlist-panel-video-wrapper-renderer, ytd-playlist-video-renderer, ytd-rich-item-renderer, a[href*="/watch"][href*="v="]'
       );
-      if (!row || !decoratedRows.has(row) || row.dataset.ytpdsSorted !== '1') {
+      const videoId = getVideoIdFromRow(row);
+      if (!row || !decoratedVideoIds.has(videoId)) {
         if (row) row.classList.remove('ytpds-badge-overlay');
         badge.remove();
       }
@@ -694,26 +860,77 @@
 
   function hasDesiredDomOrder() {
     if (state.sortedItems.length === 0) return true;
+    const snapshot = getVisualOrderSnapshot();
+    return Boolean(snapshot && snapshot.orderMatches);
+  }
+
+  function getVisualOrderSnapshot() {
     const rows = getPlaylistRows();
-    if (rows.length === 0) return false;
+    if (rows.length === 0) return null;
+
     const rowByVideoId = new Map();
     for (const row of rows) {
       const videoId = getVideoIdFromRow(row);
       if (videoId && !rowByVideoId.has(videoId)) rowByVideoId.set(videoId, row);
     }
-    const sortedRows = state.sortedItems
-      .map((item) => rowByVideoId.get(item.videoId))
-      .filter(Boolean);
-    if (sortedRows.length === 0) return false;
-    const parent = sortedRows[0].parentElement;
-    if (!parent || sortedRows.some((row) => row.parentElement !== parent)) return false;
-    const currentOrder = Array.from(parent.children)
-      .filter((node) => rowByVideoId.has(getVideoIdFromRow(node)))
-      .map((node) => getVideoIdFromRow(node));
+
     const desiredOrder = state.sortedItems
       .filter((item) => rowByVideoId.has(item.videoId))
       .map((item) => item.videoId);
-    return sameOrder(currentOrder, desiredOrder);
+    if (desiredOrder.length === 0) return null;
+
+    const sortedRows = desiredOrder.map((videoId) => rowByVideoId.get(videoId)).filter(Boolean);
+    const parent = sortedRows[0] && sortedRows[0].parentElement;
+    if (!parent || sortedRows.some((row) => row.parentElement !== parent)) {
+      return {
+        rows,
+        rowByVideoId,
+        desiredOrder,
+        currentOrder: [],
+        matchedCount: desiredOrder.length,
+        allVisibleMatched: desiredOrder.length === rows.length,
+        orderMatches: false,
+      };
+    }
+
+    const currentOrder = Array.from(parent.children)
+      .filter((node) => rowByVideoId.has(getVideoIdFromRow(node)))
+      .map((node) => getVideoIdFromRow(node));
+
+    return {
+      rows,
+      rowByVideoId,
+      desiredOrder,
+      currentOrder,
+      matchedCount: desiredOrder.length,
+      allVisibleMatched: desiredOrder.length === rows.length,
+      orderMatches: sameOrder(currentOrder, desiredOrder),
+    };
+  }
+
+  function tryAutoEnableSavedBadges(reason) {
+    if (state.badgesEnabled || state.sortedItems.length === 0) return false;
+    const snapshot = getVisualOrderSnapshot();
+    if (!snapshot || !snapshot.allVisibleMatched || !snapshot.orderMatches) {
+      debugLog('auto badges skipped', {
+        reason,
+        rows: snapshot ? snapshot.rows.length : 0,
+        matched: snapshot ? snapshot.matchedCount : 0,
+        orderMatches: Boolean(snapshot && snapshot.orderMatches),
+      });
+      return false;
+    }
+
+    state.badgesEnabled = true;
+    state.visualMode = 'badges';
+    decorateRows(snapshot.rowByVideoId);
+    setDebug(`auto badges enabled (${reason})`, {
+      rows: snapshot.rows.length,
+      matched: snapshot.matchedCount,
+      badgeCount: document.querySelectorAll('.ytpds-date-badge').length,
+    });
+    setSummaryStatus();
+    return true;
   }
 
   function storageKeyForPlaylist(playlistId) {
@@ -743,6 +960,13 @@
     if (!canUseChromeStorage()) return Promise.resolve();
     return new Promise((resolve) => {
       chrome.storage.local.set({ [key]: value }, () => resolve());
+    });
+  }
+
+  function storageRemove(key) {
+    if (!canUseChromeStorage()) return Promise.resolve();
+    return new Promise((resolve) => {
+      chrome.storage.local.remove(key, () => resolve());
     });
   }
 
@@ -796,7 +1020,7 @@
 
   async function saveSortState() {
     const playlistId = sorter.getPlaylistIdFromUrl(location.href);
-    if (!playlistId || state.sortedItems.length === 0) return;
+    if (!playlistId || state.sortedItems.length === 0 || state.order === 'native') return;
     await storageSet(storageKeyForPlaylist(playlistId), {
       playlistId,
       order: state.order,
@@ -804,6 +1028,13 @@
       dateByVideoId: Object.assign({}, state.dateByVideoId),
       savedAt: Date.now(),
     });
+  }
+
+  async function clearSortState() {
+    const playlistId = sorter.getPlaylistIdFromUrl(location.href);
+    if (!playlistId) return;
+    state.restoredPlaylistId = '';
+    await storageRemove(storageKeyForPlaylist(playlistId));
   }
 
   async function restoreSortState() {
@@ -825,7 +1056,11 @@
     scheduleSavedOrderApply(250);
     scheduleSavedOrderApply(1000);
     scheduleSavedOrderApply(2500);
-    setStatusKey('saved', state.sortedItems.length);
+    if (state.badgesEnabled) {
+      setSummaryStatus();
+    } else {
+      setStatusKey('saved', state.sortedItems.length);
+    }
     ensurePanel();
   }
 
@@ -840,12 +1075,15 @@
       state.visualMode = 'badges';
       state.forceOrderWithoutBadges = false;
     }
+    tryAutoEnableSavedBadges('saved order');
   }
 
   function scheduleSavedOrderApply(ms) {
     setTimeout(() => {
       if (state.sortedItems.length > 0 && !state.badgesEnabled) {
         applySavedOrderWithoutBadges();
+      } else if (state.sortedItems.length > 0) {
+        tryAutoEnableSavedBadges(`saved order ${ms}ms`);
       }
     }, ms);
   }
@@ -904,7 +1142,8 @@
       state.badgesEnabled = false;
       clearDecorations();
     }
-    const panelMissingBeforeEnsure = isSupportedPlaylistPage() && !state.panel;
+    const panelMissingBeforeEnsure =
+      isSupportedPlaylistPage() && (!state.panel || !document.contains(state.panel));
     ensurePanel();
     if (pathChanged && state.sortedItems.length > 0) {
       state.badgesEnabled = false;

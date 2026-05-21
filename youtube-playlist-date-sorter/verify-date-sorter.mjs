@@ -9,12 +9,16 @@ const i18n = require('./shared/i18n.js');
 const html = readFileSync('fixtures/watch-page.html', 'utf8');
 const contentScript = readFileSync('content/content.js', 'utf8');
 const contentCss = readFileSync('content/content.css', 'utf8');
+const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'));
 assert.equal(sorter.extractPublishDateFromHtml(html), '2024-03-05');
 assert.match(html, /<ytd-playlist-panel-video-renderer>/);
 assert.match(html, /class="metadata-wrapper"/);
 assert.match(contentScript, /\.metadata-wrapper/);
 assert.match(contentScript, /ytpds-badge-overlay/);
+assert.match(contentScript, /mixed parents, decorated/);
+assert.match(contentScript, /localStorage\.getItem\('ytpds:debug'\)/);
 assert.match(contentCss, /ytd-playlist-panel-video-renderer\.ytpds-badge-overlay > \.ytpds-date-badge/);
+assert.match(contentCss, /\.ytpds-debug/);
 assert.equal(
   sorter.extractPublishDateFromHtml('window["ytInitialPlayerResponse"]="{\\u0022microformat\\u0022:{\\u0022playerMicroformatRenderer\\u0022:{\\u0022publishDate\\u0022:\\u00222023-07-09\\u0022}}}"'),
   '2023-07-09'
@@ -89,7 +93,12 @@ assert.equal(i18n.normalizeLanguage('en'), 'en');
 assert.equal(i18n.normalizeLanguage('fr'), 'ja');
 assert.equal(i18n.translate('en', 'sort'), 'Sort');
 assert.equal(i18n.translate('en', 'minimize'), 'Minimize');
+assert.equal(i18n.translate('en', 'normalOrder'), 'Default order');
 assert.equal(i18n.translate('ja', 'expand'), '展開');
+assert.equal(i18n.translate('ja', 'nativeRestored'), 'YouTubeの通常順に戻しました。');
 assert.equal(i18n.translate('ja', 'badge', 2, '2024-03-05'), '投稿日順 #2 2024-03-05');
+assert.deepEqual(manifest.content_scripts[0].matches, ['https://www.youtube.com/*']);
+assert.match(contentScript, /option value="native"/);
+assert.match(contentScript, /clearSortState/);
 
 console.log('date sorter verification passed');

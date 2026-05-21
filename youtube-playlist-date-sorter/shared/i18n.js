@@ -12,6 +12,7 @@
       expand: '展開',
       orderLabel: '並び順',
       languageLabel: '表示言語',
+      normalOrder: '通常順',
       oldestFirst: '古い投稿日から',
       newestFirst: '新しい投稿日から',
       sort: '並び替え',
@@ -47,6 +48,7 @@
         return `${count}件の保存済み投稿日順があります。表示するには「並び替え」を押してください。`;
       },
       noNext: '投稿日順リストの末尾、または現在動画がリスト外です。',
+      nativeRestored: 'YouTubeの通常順に戻しました。',
     },
     en: {
       title: 'Publish-date playlist',
@@ -54,6 +56,7 @@
       expand: 'Expand',
       orderLabel: 'Sort order',
       languageLabel: 'Language',
+      normalOrder: 'Default order',
       oldestFirst: 'Oldest first',
       newestFirst: 'Newest first',
       sort: 'Sort',
@@ -89,6 +92,7 @@
         return `${count} saved publish-date items found. Press "Sort" to show badges.`;
       },
       noNext: 'This is the end of the publish-date list, or the current video is outside the list.',
+      nativeRestored: 'Restored YouTube default order.',
     },
   };
 
