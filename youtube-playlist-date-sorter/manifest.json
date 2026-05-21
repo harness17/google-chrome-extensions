@@ -5,7 +5,8 @@
   "description": "YouTube のプレイリスト再生を動画投稿日順に並び替えて次の動画へ移動します。",
   "permissions": ["storage"],
   "action": {
-    "default_title": "Playlist Date Sorter"
+    "default_title": "Playlist Date Sorter",
+    "default_popup": "popup/popup.html"
   },
   "host_permissions": ["https://www.youtube.com/*"],
   "icons": {

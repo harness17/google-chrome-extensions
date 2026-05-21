@@ -27,10 +27,6 @@
   margin-top: 8px;
 }
 
-.ytpds-controls-row {
-  align-items: stretch;
-}
-
 .ytpds-button,
 .ytpds-select {
   min-height: 32px;
@@ -69,19 +65,6 @@
 .ytpds-select {
   width: 100%;
   padding: 0 8px;
-}
-
-.ytpds-order-select {
-  flex: 1 1 auto;
-  min-width: 0;
-  width: auto;
-}
-
-.ytpds-language-select {
-  flex: 0 0 92px;
-  min-width: 0;
-  width: auto;
-  padding: 0 6px;
 }
 
 .ytpds-status {

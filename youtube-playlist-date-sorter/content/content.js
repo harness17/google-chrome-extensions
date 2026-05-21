@@ -63,7 +63,6 @@
     if (!state.panel) return;
     const title = state.panel.querySelector('[data-ytpds-title]');
     const order = state.panel.querySelector('[data-ytpds-order]');
-    const language = state.panel.querySelector('[data-ytpds-language]');
     const sortButton = state.panel.querySelector('[data-ytpds-sort]');
     const nextButton = state.panel.querySelector('[data-ytpds-next]');
     const autoButton = state.panel.querySelector('[data-ytpds-auto]');
@@ -74,10 +73,6 @@
       const desc = order.querySelector('option[value="desc"]');
       if (asc) asc.textContent = t('oldestFirst');
       if (desc) desc.textContent = t('newestFirst');
-    }
-    if (language) {
-      language.setAttribute('aria-label', t('languageLabel'));
-      language.value = state.language;
     }
     if (sortButton) sortButton.textContent = state.loading ? t('sorting') : t('sort');
     if (nextButton) nextButton.textContent = t('next');
@@ -98,16 +93,10 @@
     panel.className = 'ytpds-panel';
     panel.innerHTML = `
       <p class="ytpds-title" data-ytpds-title></p>
-      <div class="ytpds-row ytpds-controls-row">
-        <select class="ytpds-select ytpds-order-select" data-ytpds-order>
-          <option value="asc"></option>
-          <option value="desc"></option>
-        </select>
-        <select class="ytpds-select ytpds-language-select" data-ytpds-language>
-          <option value="ja">日本語</option>
-          <option value="en">English</option>
-        </select>
-      </div>
+      <select class="ytpds-select" data-ytpds-order>
+        <option value="asc"></option>
+        <option value="desc"></option>
+      </select>
       <div class="ytpds-row">
         <button class="ytpds-button" type="button" data-ytpds-sort></button>
         <button class="ytpds-button ytpds-button-primary" type="button" data-ytpds-next></button>
@@ -135,14 +124,6 @@
         applyVisualOrder();
         saveSortState();
         setSummaryStatus();
-      }
-    });
-    panel.querySelector('[data-ytpds-language]').addEventListener('change', (event) => {
-      state.language = i18n.normalizeLanguage(event.target.value);
-      saveSettings();
-      refreshPanelText();
-      if (state.badgesEnabled && state.sortedItems.length > 0) {
-        applyVisualOrder();
       }
     });
     panel.querySelector('[data-ytpds-sort]').addEventListener('click', () => refreshSortedItems());
@@ -585,14 +566,33 @@
     });
   }
 
-  async function saveSettings() {
-    await storageSet(SETTINGS_KEY, { language: state.language });
-  }
-
   async function restoreSettings() {
     const saved = await storageGet(SETTINGS_KEY);
     state.language = i18n.normalizeLanguage(saved && saved.language);
     refreshPanelText();
+  }
+
+  function attachSettingsChangeHandler() {
+    if (
+      typeof chrome === 'undefined' ||
+      !chrome.storage ||
+      !chrome.storage.onChanged ||
+      !chrome.storage.onChanged.addListener
+    ) {
+      return;
+    }
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      const changed = changes && changes[SETTINGS_KEY];
+      if (areaName !== 'local' || !changed || !changed.newValue) return;
+      const nextLanguage = i18n.normalizeLanguage(changed.newValue.language);
+      if (nextLanguage === state.language) return;
+      state.language = nextLanguage;
+      refreshPanelText();
+      if (state.badgesEnabled && state.sortedItems.length > 0) {
+        applyVisualOrder();
+      }
+    });
   }
 
   async function saveSortState() {
@@ -742,6 +742,7 @@
 
   ensurePanel();
   restoreSettings();
+  attachSettingsChangeHandler();
   restoreSortState();
   attachEndedHandler();
   document.addEventListener('yt-navigate-finish', onNavigationMaybeChanged);
