@@ -31,6 +31,7 @@
     forceOrderWithoutBadges: false,
     statusRenderer: null,
     panelObserver: null,
+    panelRemovalTimer: 0,
   };
 
   function isPlaylistWatchPage() {
@@ -40,10 +41,6 @@
   function isSupportedPlaylistPage() {
     const playlistId = sorter.getPlaylistIdFromUrl(location.href);
     return Boolean(playlistId && (location.pathname === '/watch' || location.pathname === '/playlist'));
-  }
-
-  function isPlaylistRoute() {
-    return location.pathname === '/watch' || location.pathname === '/playlist';
   }
 
   function t(key, ...args) {
@@ -95,12 +92,31 @@
   }
 
   function ensurePanel() {
-    if (!isSupportedPlaylistPage() && !isPlaylistRoute()) {
-      if (state.panel) state.panel.remove();
-      state.panel = null;
+    if (!isSupportedPlaylistPage()) {
+      if (state.panel && document.contains(state.panel) && !state.panelRemovalTimer) {
+        state.panelRemovalTimer = setTimeout(() => {
+          state.panelRemovalTimer = 0;
+          if (!isSupportedPlaylistPage()) {
+            if (state.panel) state.panel.remove();
+            state.panel = null;
+          }
+        }, 1000);
+      } else if (state.panel && !document.contains(state.panel)) {
+        state.panel = null;
+      }
       return;
     }
+
+    if (state.panelRemovalTimer) {
+      clearTimeout(state.panelRemovalTimer);
+      state.panelRemovalTimer = 0;
+    }
+
     if (state.panel && document.contains(state.panel)) return;
+
+    if (state.panel) {
+      state.panel = null;
+    }
 
     const panel = document.createElement('section');
     panel.className = 'ytpds-panel';
@@ -175,7 +191,7 @@
   function ensurePanelObserver() {
     if (state.panelObserver || !document.documentElement) return;
     state.panelObserver = new MutationObserver(() => {
-      if (!isPlaylistRoute()) return;
+      if (!isSupportedPlaylistPage()) return;
       if (!state.panel || !document.contains(state.panel)) {
         state.panel = null;
         ensurePanel();
