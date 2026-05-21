@@ -15,10 +15,44 @@
   font-size: 13px;
 }
 
+.ytpds-panel-collapsed {
+  width: auto;
+  min-width: 172px;
+  padding: 8px 10px;
+}
+
+.ytpds-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ytpds-title {
+  flex: 1;
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 700;
+}
+
+.ytpds-panel-collapsed .ytpds-title {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.ytpds-collapse {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.ytpds-collapse:hover {
+  background: #f8fafc;
 }
 
 .ytpds-row {

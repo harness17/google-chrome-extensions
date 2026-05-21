@@ -8,6 +8,8 @@
   const TEXT = {
     ja: {
       title: '投稿日順プレイリスト',
+      minimize: '最小化',
+      expand: '展開',
       orderLabel: '並び順',
       languageLabel: '表示言語',
       oldestFirst: '古い投稿日から',
@@ -48,6 +50,8 @@
     },
     en: {
       title: 'Publish-date playlist',
+      minimize: 'Minimize',
+      expand: 'Expand',
       orderLabel: 'Sort order',
       languageLabel: 'Language',
       oldestFirst: 'Oldest first',

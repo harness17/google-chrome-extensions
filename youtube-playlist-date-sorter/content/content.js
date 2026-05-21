@@ -9,6 +9,7 @@
   const state = {
     order: 'asc',
     language: 'ja',
+    panelCollapsed: false,
     autoAdvance: false,
     sortedItems: [],
     dateByVideoId: Object.create(null),
@@ -29,6 +30,7 @@
     visualMode: 'idle',
     forceOrderWithoutBadges: false,
     statusRenderer: null,
+    panelObserver: null,
   };
 
   function isPlaylistWatchPage() {
@@ -38,6 +40,10 @@
   function isSupportedPlaylistPage() {
     const playlistId = sorter.getPlaylistIdFromUrl(location.href);
     return Boolean(playlistId && (location.pathname === '/watch' || location.pathname === '/playlist'));
+  }
+
+  function isPlaylistRoute() {
+    return location.pathname === '/watch' || location.pathname === '/playlist';
   }
 
   function t(key, ...args) {
@@ -62,11 +68,18 @@
   function refreshPanelText() {
     if (!state.panel) return;
     const title = state.panel.querySelector('[data-ytpds-title]');
+    const collapseButton = state.panel.querySelector('[data-ytpds-collapse]');
     const order = state.panel.querySelector('[data-ytpds-order]');
     const sortButton = state.panel.querySelector('[data-ytpds-sort]');
     const nextButton = state.panel.querySelector('[data-ytpds-next]');
     const autoButton = state.panel.querySelector('[data-ytpds-auto]');
     if (title) title.textContent = t('title');
+    if (collapseButton) {
+      const label = state.panelCollapsed ? t('expand') : t('minimize');
+      collapseButton.textContent = label;
+      collapseButton.setAttribute('aria-label', label);
+      collapseButton.setAttribute('aria-expanded', String(!state.panelCollapsed));
+    }
     if (order) {
       order.setAttribute('aria-label', t('orderLabel'));
       const asc = order.querySelector('option[value="asc"]');
@@ -82,7 +95,7 @@
   }
 
   function ensurePanel() {
-    if (!isSupportedPlaylistPage()) {
+    if (!isSupportedPlaylistPage() && !isPlaylistRoute()) {
       if (state.panel) state.panel.remove();
       state.panel = null;
       return;
@@ -92,27 +105,37 @@
     const panel = document.createElement('section');
     panel.className = 'ytpds-panel';
     panel.innerHTML = `
-      <p class="ytpds-title" data-ytpds-title></p>
-      <select class="ytpds-select" data-ytpds-order>
-        <option value="asc"></option>
-        <option value="desc"></option>
-      </select>
-      <div class="ytpds-row">
-        <button class="ytpds-button" type="button" data-ytpds-sort></button>
-        <button class="ytpds-button ytpds-button-primary" type="button" data-ytpds-next></button>
+      <div class="ytpds-header">
+        <p class="ytpds-title" data-ytpds-title></p>
+        <button class="ytpds-collapse" type="button" data-ytpds-collapse></button>
       </div>
-      <div class="ytpds-row">
-        <button class="ytpds-button" type="button" data-ytpds-auto></button>
-      </div>
-      <div class="ytpds-progress" data-ytpds-progress hidden>
-        <div class="ytpds-progress-track">
-          <div class="ytpds-progress-bar" data-ytpds-progress-bar></div>
+      <div class="ytpds-body" data-ytpds-body>
+        <select class="ytpds-select" data-ytpds-order>
+          <option value="asc"></option>
+          <option value="desc"></option>
+        </select>
+        <div class="ytpds-row">
+          <button class="ytpds-button" type="button" data-ytpds-sort></button>
+          <button class="ytpds-button ytpds-button-primary" type="button" data-ytpds-next></button>
         </div>
-        <div class="ytpds-progress-label" data-ytpds-progress-label></div>
+        <div class="ytpds-row">
+          <button class="ytpds-button" type="button" data-ytpds-auto></button>
+        </div>
+        <div class="ytpds-progress" data-ytpds-progress hidden>
+          <div class="ytpds-progress-track">
+            <div class="ytpds-progress-bar" data-ytpds-progress-bar></div>
+          </div>
+          <div class="ytpds-progress-label" data-ytpds-progress-label></div>
+        </div>
+        <div class="ytpds-status" data-ytpds-status></div>
       </div>
-      <div class="ytpds-status" data-ytpds-status></div>
     `;
 
+    panel.querySelector('[data-ytpds-collapse]').addEventListener('click', () => {
+      state.panelCollapsed = !state.panelCollapsed;
+      updatePanelCollapsedUi();
+      saveSettings();
+    });
     panel.querySelector('[data-ytpds-order]').addEventListener('change', (event) => {
       state.order = event.target.value === 'desc' ? 'desc' : 'asc';
       if (state.sortedItems.length > 0) {
@@ -136,8 +159,29 @@
 
     document.documentElement.appendChild(panel);
     state.panel = panel;
+    updatePanelCollapsedUi();
     refreshPanelText();
     updateLoadingUi();
+  }
+
+  function updatePanelCollapsedUi() {
+    if (!state.panel) return;
+    state.panel.classList.toggle('ytpds-panel-collapsed', state.panelCollapsed);
+    const body = state.panel.querySelector('[data-ytpds-body]');
+    if (body) body.hidden = state.panelCollapsed;
+    refreshPanelText();
+  }
+
+  function ensurePanelObserver() {
+    if (state.panelObserver || !document.documentElement) return;
+    state.panelObserver = new MutationObserver(() => {
+      if (!isPlaylistRoute()) return;
+      if (!state.panel || !document.contains(state.panel)) {
+        state.panel = null;
+        ensurePanel();
+      }
+    });
+    state.panelObserver.observe(document.documentElement, { childList: true });
   }
 
   function setLoading(isLoading, phaseKey, current, total) {
@@ -406,9 +450,8 @@
       return;
     }
 
-    if (state.visualMode !== 'sorted' && !state.forceOrderWithoutBadges) {
+    if (!state.badgesEnabled && state.visualMode !== 'sorted' && !state.forceOrderWithoutBadges) {
       state.badgesEnabled = false;
-      clearDecorations();
       state.lastFetchDebug = `visual rows=${rows.length}, matched=${sortedRows.length}, native order detected`;
       setSummaryStatus();
       return;
@@ -447,11 +490,23 @@
       clearDecorations();
       return;
     }
-    clearDecorations();
     const currentVideoId = sorter.getVideoIdFromUrl(location.href);
+    const desiredVideoIds = new Set(state.sortedItems.map((item) => item.videoId));
+    const decoratedRows = new Set();
+    for (const row of getPlaylistRows()) {
+      const videoId = getVideoIdFromRow(row);
+      if (!desiredVideoIds.has(videoId) && row.dataset.ytpdsSorted === '1') {
+        row.classList.remove('ytpds-current-video');
+        delete row.dataset.ytpdsSorted;
+        delete row.dataset.ytpdsSortIndex;
+        const badge = row.querySelector('.ytpds-date-badge');
+        if (badge) badge.remove();
+      }
+    }
     state.sortedItems.forEach((item, index) => {
       const row = rowByVideoId.get(item.videoId);
       if (!row) return;
+      decoratedRows.add(row);
 
       const isCurrent = item.videoId === currentVideoId;
       if (row.classList.contains('ytpds-current-video') !== isCurrent) {
@@ -475,6 +530,7 @@
         badge.textContent = badgeText;
       }
     });
+    pruneOrphanBadges(decoratedRows);
   }
 
   function safelyDecorateRows(rowByVideoId) {
@@ -504,6 +560,17 @@
     }
   }
 
+  function pruneOrphanBadges(decoratedRows) {
+    for (const badge of document.querySelectorAll('.ytpds-date-badge')) {
+      const row = badge.closest(
+        'ytd-playlist-panel-video-renderer, ytd-playlist-panel-video-wrapper-renderer, ytd-playlist-video-renderer, ytd-rich-item-renderer, a[href*="/watch"][href*="v="]'
+      );
+      if (!row || !decoratedRows.has(row) || row.dataset.ytpdsSorted !== '1') {
+        badge.remove();
+      }
+    }
+  }
+
   function ensureBadge(row) {
     let badge = row.querySelector('.ytpds-date-badge');
     if (badge) return badge;
@@ -526,14 +593,90 @@
       state.visualObserver.disconnect();
     }
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((mutations) => {
       if (state.applyingVisualOrder || state.sortedItems.length === 0) return;
+      if (mutations.length > 0 && mutations.every(isOwnVisualMutation)) return;
       clearTimeout(state.visualApplyTimer);
       state.visualApplyTimer = setTimeout(() => applyVisualOrder(), 120);
     });
-    observer.observe(root, { attributes: true, childList: true, subtree: true });
+    observer.observe(root, {
+      attributes: true,
+      attributeOldValue: true,
+      attributeFilter: ['class', 'data-ytpds-sorted', 'data-ytpds-sort-index'],
+      childList: true,
+      subtree: true,
+    });
     state.visualObserver = observer;
     state.visualObserverRoot = root;
+  }
+
+  function isOwnVisualMutation(mutation) {
+    if (mutation.type === 'attributes') {
+      if (mutation.target.closest && mutation.target.closest('.ytpds-date-badge')) return true;
+      if (
+        mutation.attributeName === 'data-ytpds-sorted' ||
+        mutation.attributeName === 'data-ytpds-sort-index'
+      ) {
+        return true;
+      }
+      if (mutation.attributeName === 'class') {
+        return onlyClassTokenChanged(
+          mutation.oldValue || '',
+          mutation.target.getAttribute('class') || '',
+          ['ytpds-current-video']
+        );
+      }
+    }
+    if (mutation.type === 'childList') {
+      const nodes = Array.from(mutation.addedNodes).concat(Array.from(mutation.removedNodes));
+      return nodes.length > 0 && nodes.every(isYtpdsArtifactNode);
+    }
+    return false;
+  }
+
+  function isYtpdsArtifactNode(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    return (
+      node.classList.contains('ytpds-date-badge') ||
+      Boolean(node.querySelector && node.querySelector('.ytpds-date-badge'))
+    );
+  }
+
+  function onlyClassTokenChanged(oldValue, newValue, allowedTokens) {
+    const before = new Set(String(oldValue).split(/\s+/).filter(Boolean));
+    const after = new Set(String(newValue).split(/\s+/).filter(Boolean));
+    const changed = [];
+    for (const token of before) {
+      if (!after.has(token)) changed.push(token);
+    }
+    for (const token of after) {
+      if (!before.has(token)) changed.push(token);
+    }
+    return changed.length > 0 && changed.every((token) => allowedTokens.includes(token));
+  }
+
+  function hasDesiredDomOrder() {
+    if (state.sortedItems.length === 0) return true;
+    const rows = getPlaylistRows();
+    if (rows.length === 0) return false;
+    const rowByVideoId = new Map();
+    for (const row of rows) {
+      const videoId = getVideoIdFromRow(row);
+      if (videoId && !rowByVideoId.has(videoId)) rowByVideoId.set(videoId, row);
+    }
+    const sortedRows = state.sortedItems
+      .map((item) => rowByVideoId.get(item.videoId))
+      .filter(Boolean);
+    if (sortedRows.length === 0) return false;
+    const parent = sortedRows[0].parentElement;
+    if (!parent || sortedRows.some((row) => row.parentElement !== parent)) return false;
+    const currentOrder = Array.from(parent.children)
+      .filter((node) => rowByVideoId.has(getVideoIdFromRow(node)))
+      .map((node) => getVideoIdFromRow(node));
+    const desiredOrder = state.sortedItems
+      .filter((item) => rowByVideoId.has(item.videoId))
+      .map((item) => item.videoId);
+    return sameOrder(currentOrder, desiredOrder);
   }
 
   function storageKeyForPlaylist(playlistId) {
@@ -569,7 +712,20 @@
   async function restoreSettings() {
     const saved = await storageGet(SETTINGS_KEY);
     state.language = i18n.normalizeLanguage(saved && saved.language);
+    state.panelCollapsed = Boolean(saved && saved.panelCollapsed);
+    ensurePanel();
+    updatePanelCollapsedUi();
     refreshPanelText();
+    if (state.badgesEnabled && state.sortedItems.length > 0) {
+      applyVisualOrder();
+    }
+  }
+
+  async function saveSettings() {
+    await storageSet(SETTINGS_KEY, {
+      language: state.language,
+      panelCollapsed: state.panelCollapsed,
+    });
   }
 
   function attachSettingsChangeHandler() {
@@ -586,8 +742,14 @@
       const changed = changes && changes[SETTINGS_KEY];
       if (areaName !== 'local' || !changed || !changed.newValue) return;
       const nextLanguage = i18n.normalizeLanguage(changed.newValue.language);
-      if (nextLanguage === state.language) return;
+      const nextPanelCollapsed = Boolean(changed.newValue.panelCollapsed);
+      const languageChanged = nextLanguage !== state.language;
+      const collapsedChanged = nextPanelCollapsed !== state.panelCollapsed;
+      if (!languageChanged && !collapsedChanged) return;
       state.language = nextLanguage;
+      state.panelCollapsed = nextPanelCollapsed;
+      ensurePanel();
+      updatePanelCollapsedUi();
       refreshPanelText();
       if (state.badgesEnabled && state.sortedItems.length > 0) {
         applyVisualOrder();
@@ -608,6 +770,7 @@
   }
 
   async function restoreSortState() {
+    ensurePanel();
     const playlistId = sorter.getPlaylistIdFromUrl(location.href);
     if (!playlistId || state.restoredPlaylistId === playlistId) return;
     const saved = await storageGet(storageKeyForPlaylist(playlistId));
@@ -626,6 +789,7 @@
     scheduleSavedOrderApply(1000);
     scheduleSavedOrderApply(2500);
     setStatusKey('saved', state.sortedItems.length);
+    ensurePanel();
   }
 
   function applySavedOrderWithoutBadges() {
@@ -741,15 +905,23 @@
   }
 
   ensurePanel();
+  ensurePanelObserver();
   restoreSettings();
   attachSettingsChangeHandler();
   restoreSortState();
   attachEndedHandler();
+  document.addEventListener('DOMContentLoaded', ensurePanel);
+  document.addEventListener('readystatechange', ensurePanel);
   document.addEventListener('yt-navigate-finish', onNavigationMaybeChanged);
   window.addEventListener('popstate', onNavigationMaybeChanged);
-  setInterval(onNavigationMaybeChanged, 1000);
+  setInterval(onNavigationMaybeChanged, 500);
   setInterval(() => {
-    if (!state.loading && state.badgesEnabled && state.sortedItems.length > 0) {
+    if (
+      !state.loading &&
+      state.badgesEnabled &&
+      state.sortedItems.length > 0 &&
+      !hasDesiredDomOrder()
+    ) {
       applyVisualOrder();
     }
   }, 1500);

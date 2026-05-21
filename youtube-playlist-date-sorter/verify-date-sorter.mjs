@@ -81,6 +81,8 @@ assert.deepEqual(
 assert.equal(i18n.normalizeLanguage('en'), 'en');
 assert.equal(i18n.normalizeLanguage('fr'), 'ja');
 assert.equal(i18n.translate('en', 'sort'), 'Sort');
+assert.equal(i18n.translate('en', 'minimize'), 'Minimize');
+assert.equal(i18n.translate('ja', 'expand'), '展開');
 assert.equal(i18n.translate('ja', 'badge', 2, '2024-03-05'), '投稿日順 #2 2024-03-05');
 
 console.log('date sorter verification passed');

@@ -26,8 +26,16 @@
     return (UI_TEXT[normalized] && UI_TEXT[normalized][key]) || UI_TEXT.ja[key] || '';
   }
 
-  function render(language, messageKey) {
-    const normalized = i18n.normalizeLanguage(language);
+  function normalizeSettings(settings) {
+    return {
+      language: i18n.normalizeLanguage(settings && settings.language),
+      panelCollapsed: Boolean(settings && settings.panelCollapsed),
+    };
+  }
+
+  function render(settings, messageKey) {
+    const normalizedSettings = normalizeSettings(settings);
+    const normalized = normalizedSettings.language;
     document.documentElement.lang = normalized;
     document.querySelector('[data-popup-title]').textContent = text(normalized, 'title');
     document.querySelector('[data-popup-language-label]').textContent = text(normalized, 'languageLabel');
@@ -70,17 +78,21 @@
 
   async function restoreSettings() {
     const saved = await storageGet(SETTINGS_KEY);
-    render(saved && saved.language);
+    render(saved);
   }
 
   languageSelect.addEventListener('change', async (event) => {
-    const language = i18n.normalizeLanguage(event.target.value);
-    render(language);
+    const saved = normalizeSettings(await storageGet(SETTINGS_KEY));
+    const settings = {
+      language: i18n.normalizeLanguage(event.target.value),
+      panelCollapsed: saved.panelCollapsed,
+    };
+    render(settings);
     try {
-      await storageSet(SETTINGS_KEY, { language });
-      render(language, 'saved');
+      await storageSet(SETTINGS_KEY, settings);
+      render(settings, 'saved');
     } catch (_) {
-      render(language, 'error');
+      render(settings, 'error');
     }
   });
 
