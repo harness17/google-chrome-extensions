@@ -197,7 +197,7 @@
     const known = state.sortedItems.filter((item) => state.dateByVideoId[item.videoId]).length;
     const failed = state.fetchStats.httpError + state.fetchStats.noDate + state.fetchStats.networkError;
     const debug =
-      state.lastFetchDebug && (failed || state.lastFetchDebug.startsWith('visual '))
+      state.lastFetchDebug && failed && !state.lastFetchDebug.startsWith('visual ')
         ? state.lastFetchDebug
         : '';
     return t(
