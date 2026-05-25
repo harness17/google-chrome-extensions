@@ -20,3 +20,8 @@ build/
 # 環境設定
 .env
 *.local
+
+# Agent / local run logs
+*.log
+*.codex-exec-*.log
+.codex-exec*.log

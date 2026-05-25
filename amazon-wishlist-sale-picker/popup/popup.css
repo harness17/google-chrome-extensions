@@ -8,10 +8,34 @@ body {
 
 h1 {
   font-size: 16px;
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   color: #232f3e;
   border-bottom: 2px solid #ffa41c;
   padding-bottom: 6px;
+}
+
+.language-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  color: #555;
+}
+
+.language-row label {
+  font-weight: 600;
+}
+
+.language-row select {
+  max-width: 132px;
+  padding: 4px 6px;
+  border: 1px solid #d5d5d5;
+  border-radius: 4px;
+  background: #fff;
+  color: #111;
+  font-size: 11px;
 }
 
 .stats {

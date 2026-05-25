@@ -5,18 +5,32 @@
  * crossScanUpdated 通知のたびに再取得・再描画する。
  */
 
-const STATUS_LABEL = {
-  pending: '待機中',
-  scanning: 'スキャン中…',
-  ok: '完了',
-  error: 'エラー',
-};
+const { LANGUAGE_KEY, createTranslator, getLanguage } = window.__WSP_I18N__;
+
+let currentLanguage = 'ja';
+let t = createTranslator(currentLanguage);
+let currentState = null;
+
+function getStatusLabel(status) {
+  const labels = {
+    pending: t('statusPending'),
+    scanning: t('statusScanning'),
+    ok: t('statusOk'),
+    error: t('statusError'),
+  };
+  return labels[status] || status;
+}
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text != null) node.textContent = text;
   return node;
+}
+
+function formatPrice(item) {
+  const symbol = item.currency || '¥';
+  return `${symbol}${item.price.toLocaleString()}`;
 }
 
 function renderItem(item) {
@@ -32,14 +46,14 @@ function renderItem(item) {
     card.appendChild(img);
   }
 
-  card.appendChild(el('div', 'item-title', item.title || '(商品名不明)'));
+  card.appendChild(el('div', 'item-title', item.title || t('unknownItemTitle')));
 
   const meta = el('div', 'item-meta');
   if (item.discount > 0) {
     meta.appendChild(el('span', 'item-discount', `${item.discount}% OFF`));
   }
   if (item.price != null) {
-    meta.appendChild(el('span', 'item-price', `¥${item.price.toLocaleString()}`));
+    meta.appendChild(el('span', 'item-price', formatPrice(item)));
   }
   card.appendChild(meta);
   return card;
@@ -52,17 +66,19 @@ function renderList(list) {
   header.appendChild(el('span', 'list-name', list.name));
   const status = el('span', `list-status status-${list.status}`);
   if (list.status === 'ok') {
-    status.textContent = `${list.items.length} 件のセール`;
+    status.textContent = t('listSaleCount', { count: list.items.length });
   } else {
-    status.textContent = STATUS_LABEL[list.status] || list.status;
+    status.textContent = getStatusLabel(list.status);
   }
   header.appendChild(status);
   section.appendChild(header);
 
   if (list.status === 'error') {
-    section.appendChild(el('div', 'error-msg', `スキャンに失敗しました: ${list.error || '不明なエラー'}`));
+    section.appendChild(
+      el('div', 'error-msg', t('scanFailed', { error: list.error || t('unknownError') }))
+    );
   } else if (list.status === 'ok' && list.items.length === 0) {
-    section.appendChild(el('div', 'empty-msg', 'セール中の商品はありません'));
+    section.appendChild(el('div', 'empty-msg', t('noSaleItems')));
   } else if (list.status === 'ok') {
     const grid = el('div', 'item-grid');
     list.items
@@ -75,12 +91,13 @@ function renderList(list) {
 }
 
 function render(state) {
+  currentState = state;
   const summary = document.getElementById('summary');
   const container = document.getElementById('lists');
   container.textContent = '';
 
   if (!state || !state.lists || state.lists.length === 0) {
-    summary.textContent = 'スキャン対象のリストがありません。';
+    summary.textContent = t('noLists');
     return;
   }
 
@@ -90,12 +107,16 @@ function render(state) {
   const doneCount = state.lists.filter((l) => l.status === 'ok' || l.status === 'error').length;
 
   if (state.status === 'running') {
-    summary.textContent = `スキャン中… (${doneCount} / ${state.lists.length} リスト完了 / セール ${totalSale} 件)`;
+    summary.textContent = t('scanRunningSummary', {
+      done: doneCount,
+      total: state.lists.length,
+      sale: totalSale,
+    });
   } else {
     const errorCount = state.lists.filter((l) => l.status === 'error').length;
     summary.textContent =
-      `スキャン完了。${state.lists.length} リスト中 ${totalSale} 件のセール商品が見つかりました。` +
-      (errorCount > 0 ? ` (${errorCount} リストでエラー)` : '');
+      t('scanCompleteSummary', { total: state.lists.length, sale: totalSale }) +
+      (errorCount > 0 ? t('scanErrorSuffix', { count: errorCount }) : '');
   }
 
   state.lists.forEach((list) => container.appendChild(renderList(list)));
@@ -106,12 +127,36 @@ async function load() {
     const state = await chrome.runtime.sendMessage({ type: 'getCrossScanState' });
     render(state);
   } catch (e) {
-    document.getElementById('summary').textContent = '状態を取得できませんでした。';
+    document.getElementById('summary').textContent = t('stateLoadError');
   }
+}
+
+function applyStaticText() {
+  document.documentElement.lang = currentLanguage;
+  document.title = t('resultsPageTitle');
+  document.getElementById('page-title').textContent = t('resultsTitle');
+  if (!currentState) {
+    document.getElementById('summary').textContent = t('preparingScan');
+  }
+}
+
+async function applyLanguage(language) {
+  currentLanguage = language;
+  t = createTranslator(currentLanguage);
+  applyStaticText();
+  if (currentState) render(currentState);
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'crossScanUpdated') load();
 });
 
-document.addEventListener('DOMContentLoaded', load);
+document.addEventListener('DOMContentLoaded', async () => {
+  await applyLanguage(await getLanguage());
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[LANGUAGE_KEY]) {
+      applyLanguage(changes[LANGUAGE_KEY].newValue);
+    }
+  });
+  load();
+});

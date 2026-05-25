@@ -3,6 +3,8 @@
 
   // detectSale / parsePrice / SALE_KEYWORDS は shared/detect.js (manifest で先行読み込み) から取得
   const { detectSale, SALE_KEYWORDS } = window.__WSP__;
+  const { LANGUAGE_KEY, createTranslator, getLanguage } = window.__WSP_I18N__;
+  let t = createTranslator('ja');
 
   const STATE = {
     filterEnabled: false,
@@ -12,10 +14,36 @@
     fullyLoaded: false,
     isLoading: false,
     sortMethod: 'discount-desc', // discount-desc | discount-asc | price-asc | price-desc
+    language: 'ja',
   };
 
+  const ITEM_SELECTOR = [
+    '#g-items li[id^="item_"]',
+    '#g-items li[data-itemid]',
+    '#g-items li[data-reposition-action-params]',
+    '#g-items li[data-id]',
+  ].join(', ');
+
+  function isWishlistItem(node) {
+    if (!node || !node.matches?.('li')) return false;
+    return !!(
+      node.querySelector('[id^="itemPrice_"], .a-price .a-offscreen, .itemPriceDrop, [id^="itemName_"]') ||
+      node.querySelector('a[href*="/dp/"], a[href*="/gp/product/"]') ||
+      node.querySelector('img[src], img[data-a-hires]')
+    );
+  }
+
+  function getWishlistItems(root = document) {
+    return [...root.querySelectorAll(ITEM_SELECTOR)].filter(isWishlistItem);
+  }
+
+  function containsWishlistItem(node) {
+    if (!node || node.nodeType !== 1) return false;
+    return isWishlistItem(node) || !!node.querySelector?.(ITEM_SELECTOR);
+  }
+
   function scanItems() {
-    const items = document.querySelectorAll('#g-items li[data-id]');
+    const items = getWishlistItems();
     let saleCount = 0;
     items.forEach((item, index) => {
       // オリジナル順を初回のみ記録（lazy load で後から追加された分は次の番号で続く）
@@ -23,16 +51,18 @@
         item.dataset.wspOriginalIndex = String(index);
       }
       try {
-        const { isSale, discountPercent, currentPrice } = detectSale(item);
+        const { isSale, discountPercent, currentPrice, currencySymbol } = detectSale(item);
         item.dataset.wspSale = isSale ? '1' : '0';
         item.dataset.wspDiscount = String(discountPercent);
         item.dataset.wspPrice = currentPrice != null ? String(currentPrice) : '';
+        item.dataset.wspCurrency = currencySymbol || '';
         if (isSale) saleCount++;
       } catch (e) {
         console.warn('[WSP] detectSale failed for item', item, e);
         item.dataset.wspSale = '0';
         item.dataset.wspDiscount = '0';
         item.dataset.wspPrice = '';
+        item.dataset.wspCurrency = '';
       }
     });
     STATE.saleCount = saleCount;
@@ -43,7 +73,7 @@
   }
 
   function calculateStats() {
-    const items = document.querySelectorAll('#g-items li[data-id]');
+    const items = getWishlistItems();
     let maxDiscount = 0;
     items.forEach((item) => {
       if (item.dataset.wspSale === '1') {
@@ -76,7 +106,7 @@
   function sortItems() {
     const container = document.querySelector('#g-items');
     if (!container) return;
-    const items = [...container.querySelectorAll(':scope > li[data-id]')];
+    const items = getWishlistItems(container);
     items.sort((a, b) => {
       const aSale = a.dataset.wspSale === '1';
       const bSale = b.dataset.wspSale === '1';
@@ -85,8 +115,8 @@
       if (aSale && bSale) {
         const aDiscount = parseInt(a.dataset.wspDiscount || '0', 10);
         const bDiscount = parseInt(b.dataset.wspDiscount || '0', 10);
-        const aPrice = a.dataset.wspPrice !== '' ? parseInt(a.dataset.wspPrice || '0', 10) : null;
-        const bPrice = b.dataset.wspPrice !== '' ? parseInt(b.dataset.wspPrice || '0', 10) : null;
+        const aPrice = a.dataset.wspPrice !== '' ? Number(a.dataset.wspPrice || '0') : null;
+        const bPrice = b.dataset.wspPrice !== '' ? Number(b.dataset.wspPrice || '0') : null;
 
         switch (STATE.sortMethod) {
           case 'discount-asc':
@@ -112,7 +142,7 @@
   function restoreOrder() {
     const container = document.querySelector('#g-items');
     if (!container) return;
-    const items = [...container.querySelectorAll(':scope > li[data-id]')];
+    const items = getWishlistItems(container);
     items.sort((a, b) =>
       parseInt(a.dataset.wspOriginalIndex || '0', 10) - parseInt(b.dataset.wspOriginalIndex || '0', 10)
     );
@@ -120,11 +150,11 @@
   }
 
   function applyFilter() {
-    const items = document.querySelectorAll('#g-items li[data-id]');
+    const items = getWishlistItems();
     items.forEach((item) => {
       const isSale = item.dataset.wspSale === '1';
       const discount = parseInt(item.dataset.wspDiscount || '0', 10);
-      const price = item.dataset.wspPrice !== '' ? parseInt(item.dataset.wspPrice || '0', 10) : null;
+      const price = item.dataset.wspPrice !== '' ? Number(item.dataset.wspPrice || '0') : null;
       let hidden = false;
       if (STATE.filterEnabled) {
         if (!isSale) {
@@ -158,14 +188,14 @@
     container.innerHTML = `
       <div class="wsp-controls-row">
         <button id="wsp-toggle-btn" class="wsp-btn" type="button">
-          <span class="wsp-btn-label">セールのみ表示</span>
-          (<span id="wsp-count">0</span>件)
+          <span class="wsp-btn-label"></span>
+          (<span id="wsp-count">0</span><span id="wsp-count-unit"></span>)
         </button>
         <span id="wsp-status" class="wsp-status"></span>
       </div>
       <div class="wsp-filter-settings">
         <div class="wsp-setting-row">
-          <label for="wsp-discount-input" class="wsp-setting-label">最低割引率:</label>
+          <label for="wsp-discount-input" class="wsp-setting-label" data-wsp-i18n="minDiscount"></label>
           <div class="wsp-setting-input-group">
             <input id="wsp-discount-input" type="range" min="0" max="90" step="5" value="0" class="wsp-range-input">
             <span id="wsp-discount-value" class="wsp-setting-value">0</span>
@@ -173,20 +203,20 @@
           </div>
         </div>
         <div class="wsp-setting-row">
-          <label for="wsp-price-input" class="wsp-setting-label">最高価格:</label>
+          <label for="wsp-price-input" class="wsp-setting-label" data-wsp-i18n="maxPrice"></label>
           <div class="wsp-setting-input-group">
-            <input id="wsp-price-input" type="number" min="0" step="500" value="0" class="wsp-number-input" placeholder="0=制限なし">
+            <input id="wsp-price-input" type="number" min="0" step="500" value="0" class="wsp-number-input">
             <span class="wsp-setting-unit">¥</span>
           </div>
         </div>
       </div>
       <div id="wsp-sort-controls" class="wsp-sort-controls" style="display: none;">
-        <label for="wsp-sort-select" class="wsp-sort-label">ソート:</label>
+        <label for="wsp-sort-select" class="wsp-sort-label" data-wsp-i18n="sort"></label>
         <select id="wsp-sort-select" class="wsp-sort-select">
-          <option value="discount-desc">割引率: 高い順</option>
-          <option value="discount-asc">割引率: 低い順</option>
-          <option value="price-asc">価格: 安い順</option>
-          <option value="price-desc">価格: 高い順</option>
+          <option value="discount-desc" data-wsp-i18n="sortDiscountDesc"></option>
+          <option value="discount-asc" data-wsp-i18n="sortDiscountAsc"></option>
+          <option value="price-asc" data-wsp-i18n="sortPriceAsc"></option>
+          <option value="price-desc" data-wsp-i18n="sortPriceDesc"></option>
         </select>
       </div>
     `;
@@ -215,6 +245,8 @@
     discountInput.value = STATE.minDiscountPercent;
     discountValue.textContent = STATE.minDiscountPercent;
     priceInput.value = STATE.maxPrice;
+    updateLanguageText();
+    updateUI();
 
     return true;
   }
@@ -231,6 +263,21 @@
 
   function updateSettingsPanel() {
     // 設定UIは常に表示されているので不要
+  }
+
+  function updateLanguageText() {
+    document.querySelectorAll('#wsp-controls [data-wsp-i18n]').forEach((node) => {
+      node.textContent = t(node.dataset.wspI18n);
+    });
+    const priceInput = document.getElementById('wsp-price-input');
+    if (priceInput) priceInput.placeholder = t('noLimitPlaceholder');
+    const countUnit = document.getElementById('wsp-count-unit');
+    if (countUnit) countUnit.textContent = t('itemCountSuffix');
+
+    const overlayTitle = document.querySelector('#wsp-overlay .wsp-overlay-title');
+    if (overlayTitle) overlayTitle.textContent = t('overlayTitle');
+    const overlaySubtitle = document.querySelector('#wsp-overlay .wsp-overlay-subtitle');
+    if (overlaySubtitle) overlaySubtitle.textContent = t('overlaySubtitle');
   }
 
   async function onToggleClick() {
@@ -281,20 +328,21 @@
         <div class="wsp-overlay-text">
           <div class="wsp-overlay-title">全件読み込み中</div>
           <div class="wsp-overlay-subtitle">セール判定のため、ウィッシュリストを末尾までスキャンしています</div>
-          <div class="wsp-overlay-progress" id="wsp-overlay-progress">0件</div>
+          <div class="wsp-overlay-progress" id="wsp-overlay-progress"></div>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
+    updateLanguageText();
   }
 
   function updateOverlayProgress(count, total) {
     const el = document.getElementById('wsp-overlay-progress');
     if (!el) return;
     if (total && total > 0) {
-      el.textContent = `${count} / ${total} 件 読み込み済み`;
+      el.textContent = t('overlayProgressWithTotal', { count, total });
     } else {
-      el.textContent = `${count}件 読み込み済み`;
+      el.textContent = t('overlayProgress', { count });
     }
   }
 
@@ -318,7 +366,7 @@
       }
     }
     // テキスト解析が外れた場合: 現在読み込まれている li 件数をフォールバックとして返す
-    const currentCount = document.querySelectorAll('#g-items li[data-id]').length;
+    const currentCount = getWishlistItems().length;
     return currentCount > 0 ? currentCount : null;
   }
 
@@ -340,13 +388,7 @@
         resolve();
       };
       const observer = new MutationObserver((mutations) => {
-        const added = mutations.some((m) =>
-          Array.from(m.addedNodes).some(
-            (n) =>
-              n.nodeType === 1 &&
-              (n.matches?.('li[data-id]') || n.querySelector?.('li[data-id]'))
-          )
-        );
+        const added = mutations.some((m) => Array.from(m.addedNodes).some(containsWishlistItem));
         if (added) {
           if (settleTimer) clearTimeout(settleTimer);
           settleTimer = setTimeout(finish, settleMs);
@@ -378,7 +420,7 @@
     const newItemTimeout = opts.headless ? 1500 : 600;
     const newItemSettle = opts.headless ? 250 : 80;
 
-    const countItems = () => document.querySelectorAll('#g-items li[data-id]').length;
+    const countItems = () => getWishlistItems().length;
     let lastCount = countItems();
     let stableIterations = 0;
 
@@ -420,11 +462,11 @@
     const label = btn.querySelector('.wsp-btn-label');
     if (label) {
       if (STATE.isLoading) {
-        label.textContent = '読み込み中...';
+        label.textContent = t('loading');
       } else if (STATE.filterEnabled) {
-        label.textContent = '全件表示に戻す';
+        label.textContent = t('showAllItems');
       } else {
-        label.textContent = 'セールのみ表示';
+        label.textContent = t('showSaleOnly');
       }
     }
     const countEl = document.getElementById('wsp-count');
@@ -435,12 +477,16 @@
     if (STATE.isLoading) {
       return;
     } else if (STATE.filterEnabled && STATE.saleCount === 0) {
-      status.textContent = 'セール中の商品はありません';
+      status.textContent = t('noSaleItems');
     } else if (STATE.filterEnabled) {
       const parts = [];
-      if (STATE.minDiscountPercent > 0) parts.push(`${STATE.minDiscountPercent}% 以上`);
-      if (STATE.maxPrice > 0) parts.push(`¥${STATE.maxPrice.toLocaleString()} 以下`);
-      status.textContent = parts.length > 0 ? `${parts.join(' / ')} で絞り込み中` : '';
+      if (STATE.minDiscountPercent > 0) {
+        parts.push(t('filterMinDiscount', { value: STATE.minDiscountPercent }));
+      }
+      if (STATE.maxPrice > 0) {
+        parts.push(t('filterMaxPrice', { value: STATE.maxPrice.toLocaleString() }));
+      }
+      status.textContent = parts.length > 0 ? t('filtering', { filters: parts.join(' / ') }) : '';
     } else {
       status.textContent = '';
     }
@@ -469,6 +515,11 @@
     }
   }
 
+  async function loadLanguage() {
+    STATE.language = await getLanguage();
+    t = createTranslator(STATE.language);
+  }
+
   function watchItems() {
     const itemsContainer = document.querySelector('#g-items');
     if (!itemsContainer) {
@@ -488,13 +539,7 @@
     updateUI();
 
     const observer = new MutationObserver((mutations) => {
-      const hasNewItems = mutations.some((m) =>
-        Array.from(m.addedNodes).some(
-          (n) =>
-            n.nodeType === 1 &&
-            (n.matches?.('li[data-id]') || n.querySelector?.('li[data-id]'))
-        )
-      );
+      const hasNewItems = mutations.some((m) => Array.from(m.addedNodes).some(containsWishlistItem));
       if (hasNewItems) scheduleRescan();
     });
     observer.observe(itemsContainer, { childList: true });
@@ -507,6 +552,12 @@
       STATE.maxPrice = Number(s.maxPrice) || 0;
       applyFilter();
       updateSettingsPanel();
+      updateUI();
+    }
+    if (area === 'local' && changes[LANGUAGE_KEY]) {
+      STATE.language = changes[LANGUAGE_KEY].newValue || 'ja';
+      t = createTranslator(STATE.language);
+      updateLanguageText();
       updateUI();
     }
   });
@@ -529,7 +580,7 @@
       const name = (a.textContent || '').trim().replace(/\s+/g, ' ');
       if (!name || name.length > 80) return;
       if (!map.has(id)) {
-        map.set(id, { id, name, url: `https://www.amazon.co.jp/hz/wishlist/ls/${id}` });
+        map.set(id, { id, name, url: `${location.origin}/hz/wishlist/ls/${id}` });
       }
     });
     // サイドバーに current list が別マークアップで出る場合に備え、URL から確実に追加する
@@ -541,8 +592,8 @@
       if (!map.has(id)) {
         const curName =
           (document.querySelector('#profile-list-name')?.textContent || '').trim() ||
-          'このリスト';
-        map.set(id, { id, name: curName, url: `https://www.amazon.co.jp/hz/wishlist/ls/${id}` });
+          t('currentList');
+        map.set(id, { id, name: curName, url: `${location.origin}/hz/wishlist/ls/${id}` });
       }
     }
     return [...map.values()];
@@ -550,7 +601,7 @@
 
   /** セール判定済みの商品から、結果ページ表示用のデータを収集する。 */
   function collectSaleItems() {
-    const items = document.querySelectorAll('#g-items li[data-id]');
+    const items = getWishlistItems();
     const result = [];
     items.forEach((item) => {
       if (item.dataset.wspSale !== '1') return;
@@ -560,11 +611,12 @@
       const img = item.querySelector('img');
       const priceStr = item.dataset.wspPrice;
       result.push({
-        title: (link?.textContent || link?.getAttribute('title') || '(商品名不明)').trim(),
+        title: (link?.textContent || link?.getAttribute('title') || t('unknownItemTitle')).trim(),
         url: link?.href || '',
         image: img?.src || '',
         discount: parseInt(item.dataset.wspDiscount || '0', 10),
-        price: priceStr !== '' && priceStr != null ? parseInt(priceStr, 10) : null,
+        price: priceStr !== '' && priceStr != null ? Number(priceStr) : null,
+        currency: item.dataset.wspCurrency || '',
       });
     });
     return result;
@@ -584,7 +636,7 @@
       obs.observe(document.documentElement, { childList: true, subtree: true });
       const timer = setTimeout(() => {
         obs.disconnect();
-        reject(new Error('商品リストが見つかりませんでした'));
+        reject(new Error(t('productListNotFound')));
       }, timeoutMs);
     });
   }
@@ -639,7 +691,7 @@
   });
 
   function init() {
-    loadSettings().then(() => {
+    Promise.all([loadSettings(), loadLanguage()]).then(() => {
       watchItems();
     });
   }

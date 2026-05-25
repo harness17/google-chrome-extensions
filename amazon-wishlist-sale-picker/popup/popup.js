@@ -1,3 +1,55 @@
+const { LANGUAGE_KEY, createTranslator, getLanguage, setLanguage } = window.__WSP_I18N__;
+
+let currentLanguage = 'ja';
+let t = createTranslator(currentLanguage);
+let currentCrossScanState = 'unknown';
+
+function applyStaticText() {
+  document.documentElement.lang = currentLanguage;
+  document.querySelectorAll('[data-i18n]').forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  document.getElementById('language-label').textContent = t('languageLabel');
+  const languageSelect = document.getElementById('language-select');
+  languageSelect.value = currentLanguage;
+  languageSelect.querySelector('option[value="ja"]').textContent = t('languageJa');
+  languageSelect.querySelector('option[value="en"]').textContent = t('languageEn');
+}
+
+function applyCrossScanText() {
+  const btn = document.getElementById('cross-scan-btn');
+  const hint = document.getElementById('cross-hint');
+  if (!btn || !hint) return;
+
+  switch (currentCrossScanState) {
+    case 'loadingLists':
+      btn.textContent = t('crossScanLoadingLists');
+      break;
+    case 'scanning':
+      btn.textContent = t('crossScanScanning');
+      hint.textContent = t('crossScanRunningHint');
+      break;
+    case 'ready':
+      btn.textContent = t('crossScanButton');
+      hint.textContent = t('crossScanReadyHint');
+      break;
+    case 'notWishlist':
+      btn.textContent = t('crossScanButton');
+      hint.textContent = t('crossScanOpenWishlistHint');
+      break;
+    default:
+      btn.textContent = t('crossScanButton');
+      break;
+  }
+}
+
+async function applyLanguage(language) {
+  currentLanguage = language;
+  t = createTranslator(currentLanguage);
+  applyStaticText();
+  applyCrossScanText();
+}
+
 async function updateStats() {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -29,14 +81,16 @@ async function getActiveTab() {
 
 async function runCrossScan(tab, btn, hint) {
   btn.disabled = true;
-  btn.textContent = 'リスト取得中…';
+  currentCrossScanState = 'loadingLists';
+  btn.textContent = t('crossScanLoadingLists');
 
   const res = await chrome.tabs
     .sendMessage(tab.id, { type: 'enumerateLists' })
     .catch(() => null);
   if (!res || !res.lists || res.lists.length === 0) {
-    hint.textContent = 'リストを取得できませんでした。ページを再読み込みしてください。';
-    btn.textContent = '全リスト横断スキャン';
+    hint.textContent = t('crossScanListError');
+    btn.textContent = t('crossScanButton');
+    currentCrossScanState = 'ready';
     btn.disabled = false;
     return;
   }
@@ -45,16 +99,17 @@ async function runCrossScan(tab, btn, hint) {
     .sendMessage({ type: 'startCrossScan', lists: res.lists })
     .catch(() => null);
   if (start && start.ok) {
-    btn.textContent = 'スキャン中…';
-    hint.textContent =
-      `${res.lists.length} 件のリストをスキャン中。スキャン用ウィンドウが開きます` +
-      '（完了まで触らずにお待ちください）。結果は結果ページに表示されます。';
+    currentCrossScanState = 'scanning';
+    btn.textContent = t('crossScanScanning');
+    hint.textContent = t('crossScanStarted', { count: res.lists.length });
   } else if (start && start.reason === 'running') {
-    hint.textContent = '既に横断スキャンが実行中です。';
-    btn.textContent = 'スキャン中…';
+    currentCrossScanState = 'scanning';
+    hint.textContent = t('crossScanAlreadyRunning');
+    btn.textContent = t('crossScanScanning');
   } else {
-    hint.textContent = 'スキャンを開始できませんでした。';
-    btn.textContent = '全リスト横断スキャン';
+    hint.textContent = t('crossScanStartError');
+    btn.textContent = t('crossScanButton');
+    currentCrossScanState = 'ready';
     btn.disabled = false;
   }
 }
@@ -68,8 +123,9 @@ async function initCrossScan() {
     .catch(() => null);
   if (state && state.status === 'running') {
     btn.disabled = true;
-    btn.textContent = 'スキャン中…';
-    hint.textContent = '横断スキャンを実行中です。結果ページを確認してください。';
+    currentCrossScanState = 'scanning';
+    btn.textContent = t('crossScanScanning');
+    hint.textContent = t('crossScanRunningHint');
     return;
   }
 
@@ -84,15 +140,33 @@ async function initCrossScan() {
 
   if (onWishlist) {
     btn.disabled = false;
-    hint.textContent = 'サイドバーの全リストを横断してセール商品を集約します。';
+    currentCrossScanState = 'ready';
+    hint.textContent = t('crossScanReadyHint');
+    btn.textContent = t('crossScanButton');
     btn.addEventListener('click', () => runCrossScan(tab, btn, hint));
   } else {
     btn.disabled = true;
-    hint.textContent = 'ウィッシュリストページを開いてから実行してください。';
+    currentCrossScanState = 'notWishlist';
+    hint.textContent = t('crossScanOpenWishlistHint');
+    btn.textContent = t('crossScanButton');
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+async function initLanguage() {
+  await applyLanguage(await getLanguage());
+  document.getElementById('language-select').addEventListener('change', async (event) => {
+    await setLanguage(event.target.value);
+    await applyLanguage(event.target.value);
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[LANGUAGE_KEY]) {
+      applyLanguage(changes[LANGUAGE_KEY].newValue);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await initLanguage();
   updateStats();
   initCrossScan();
   // content script からの統計更新通知をリッスン

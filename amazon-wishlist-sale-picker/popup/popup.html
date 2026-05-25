@@ -8,20 +8,28 @@
 <body>
   <h1>Wishlist Sale Picker</h1>
 
+  <div class="language-row">
+    <label for="language-select" id="language-label">言語</label>
+    <select id="language-select">
+      <option value="ja">日本語</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+
   <div class="stats">
     <div class="stat-item">
-      <span class="stat-label">セール商品数</span>
+      <span class="stat-label" data-i18n="saleItemCount">セール商品数</span>
       <span class="stat-value" id="sale-count">0</span>
-      <span class="stat-unit">件</span>
+      <span class="stat-unit" data-i18n="itemUnit">件</span>
     </div>
     <div class="stat-item">
-      <span class="stat-label">最高割引率</span>
+      <span class="stat-label" data-i18n="maxDiscount">最高割引率</span>
       <span class="stat-value" id="max-discount">—</span>
       <span class="stat-unit">%</span>
     </div>
   </div>
 
-  <p class="hint">ウィッシュリストページで設定値とソート方法を変更できます。</p>
+  <p class="hint" data-i18n="popupHint">ウィッシュリストページで設定値とソート方法を変更できます。</p>
 
   <div class="cross-scan">
     <button id="cross-scan-btn" class="cross-scan-btn" type="button" disabled>
@@ -30,6 +38,7 @@
     <p class="hint" id="cross-hint">ウィッシュリストページを開いてから実行してください。</p>
   </div>
 
+  <script src="../shared/i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

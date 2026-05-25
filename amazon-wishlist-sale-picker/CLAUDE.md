@@ -32,7 +32,7 @@ node verify-detect.mjs
 | タイムセールバッジ | `.wl-deal-rich-badge` + `.wl-deal-rich-badge-label` | "15%OFF" のような割引率テキスト |
 | 過去価格（打ち消し） | `.wl-deal-price.a-text-strike` または `.wl-deal-price-and-striked-price .a-text-strike` | 元値 |
 | 価格下落通知 | `.itemPriceDrop` または `[id^="itemPriceDrop_"]` | "価格が30%下がりました" |
-| キーワードフォールバック | `タイムセール` `過去価格:` `%OFF` 等 | セール判定のみ（割引率不明） |
+| キーワードフォールバック | `タイムセール` `過去価格:` `Limited time deal` `Was:` `%OFF` / `% off` 等 | セール判定のみ（割引率不明） |
 
 ウィッシュリスト DOM は商品ごとに価格情報の出方が異なる（タイムセール商品にはバッジ、登録時より値下がりした商品には PriceDrop 通知）。新パターンに遭遇したら `fixtures/<asin>.html` に追加 → `verify-detect.mjs` にケース追加。
 
@@ -44,7 +44,7 @@ manifest.json の `matches`:
 - `https://www.amazon.co.jp/hz/wishlist/genericItemsPage/*`
 - `https://www.amazon.co.jp/gp/registry/wishlist/*`
 
-amazon.com など他ドメインはスコープ外。商品詳細ページ (`/dp/*`) では動作しない（拡張機能の意図）。
+amazon.com など海外ドメインはスコープ外。Amazon.co.jp を英語表示にした場合の英語セール文言は検出対象に含める。商品詳細ページ (`/dp/*`) では動作しない（拡張機能の意図）。
 
 ## 全件読み込みの仕組み
 

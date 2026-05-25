@@ -9,6 +9,7 @@ This file provides guidance to Codex when working in this repository.
 現在の主な拡張:
 
 - `amazon-wishlist-sale-picker/` — Amazon.co.jp ウィッシュリストからセール商品を抽出する拡張
+- `youtube-playlist-date-sorter/` — YouTube プレイリスト再生を動画投稿日順に並び替えて移動する拡張
 
 ## 作業ルール
 
