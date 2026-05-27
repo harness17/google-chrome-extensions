@@ -54,6 +54,12 @@ const cases = [
     expectSale: true,
     expectDiscount: 20,
   },
+  {
+    name: 'B0FAKEPCT1 (商品名に 20%OFF を含む通常価格 — 誤検出しないこと)',
+    file: 'fixtures/title-with-percent-item.html',
+    expectSale: false,
+    expectDiscount: 0,
+  },
 ];
 
 let allOk = true;

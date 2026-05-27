@@ -31,9 +31,24 @@
     return m ? m[0] : null;
   }
 
-  function collectSignalText(root) {
-    const parts = [root.textContent || ''];
-    root.querySelectorAll('[aria-label], [title], [data-a-strike], [data-a-color], [data-csa-c-content-id]').forEach(
+  // 商品タイトルは商品名に "%OFF" 等を含むことがあり、セール判定の誤検出源になる。
+  // フォールバック用の signal text からはタイトル要素を除外する。
+  const TITLE_EXCLUDE_SELECTOR =
+    'a[id^="itemName_"], h2 a, h3 a, .a-link-normal[title], [id^="itemName_"]';
+
+  function collectSignalText(root, options) {
+    const excludeTitles = !!(options && options.excludeTitles);
+    let scope = root;
+    if (excludeTitles) {
+      scope = root.cloneNode(true);
+      scope.querySelectorAll(TITLE_EXCLUDE_SELECTOR).forEach((el) => {
+        // title 属性は商品名そのものなのでまず外し、要素自体を取り除く
+        el.removeAttribute('title');
+        el.remove();
+      });
+    }
+    const parts = [scope.textContent || ''];
+    scope.querySelectorAll('[aria-label], [title], [data-a-strike], [data-a-color], [data-csa-c-content-id]').forEach(
       (el) => {
         ['aria-label', 'title', 'data-a-strike', 'data-a-color', 'data-csa-c-content-id'].forEach(
           (attr) => {
@@ -107,7 +122,7 @@
       priceDrop ||
       (originalPrice && currentPrice && originalPrice > currentPrice)
     );
-    const itemText = collectSignalText(item);
+    const itemText = collectSignalText(item, { excludeTitles: true });
     const discountFromSignals = parseDiscountPercent(itemText);
     let discountPercent = Math.max(
       discountFromBadge,
