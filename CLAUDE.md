@@ -56,4 +56,22 @@ foreach ($size in 16, 48, 128) {
 
 ## Git
 
-このコンテナディレクトリは現状 git 未初期化。今後 git 化する場合、各拡張ごとにサブモジュール化するか単一リポジトリで進めるかは未定。
+このコンテナディレクトリは単一リポジトリで管理する。store package、スクリーンショット、ローカル設定、ユーザー固有素材を stage する前に必ず確認する。
+
+## 共同開発ハーネス（Codex × Claude Code）
+
+このリポジトリは Codex と Claude Code が共同で開発する。汎用ハーネス本体と GoogleChromeExtensions 固有 profile は以下を読む。
+
+@.claude/rules/cross-agent-harness.md
+@.claude/rules/project-collaboration-profile.md
+@.claude/rules/handoff-protocol.md
+
+**Claude Code が作業を開始するときの流れ：**
+
+1. ユーザーの依頼を聞いたら、汎用ハーネスと GoogleChromeExtensions profile の担当境界で Codex に振るか自分で握るか判断する。
+2. Codex に振るなら `/codex-handoff` スキルで依頼セクションを `CLAUDE_CODE_HANDOFF.md` に追記する。
+3. 自分で実装する場合は通常のフローで進め、必要に応じて Codex にレビューを依頼する。
+4. Codex の作業完了後は `/cross-review` スキルでレビューする。
+5. Merge / publish 判断はユーザー指示を待つ。
+
+**最新の引き継ぎ：** `CLAUDE_CODE_HANDOFF.md` を参照する。

@@ -36,6 +36,30 @@ const cases = [
     expectSale: true,
     expectDiscount: 30,
   },
+  {
+    name: 'B0TESTSALE (amazon.com limited time deal 20% off)',
+    file: 'fixtures/amazon-com-sale-item.html',
+    expectSale: true,
+    expectDiscount: 20,
+  },
+  {
+    name: 'B0TESTDROP (amazon.com price dropped 30%)',
+    file: 'fixtures/amazon-com-price-drop-item.html',
+    expectSale: true,
+    expectDiscount: 30,
+  },
+  {
+    name: 'B0TESTHIDDEN (amazon.com aria-label 20% off)',
+    file: 'fixtures/amazon-com-hidden-discount-item.html',
+    expectSale: true,
+    expectDiscount: 20,
+  },
+  {
+    name: 'B0FAKEPCT1 (商品名に 20%OFF を含む通常価格 — 誤検出しないこと)',
+    file: 'fixtures/title-with-percent-item.html',
+    expectSale: false,
+    expectDiscount: 0,
+  },
 ];
 
 let allOk = true;
@@ -47,7 +71,7 @@ for (const c of cases) {
   const ok = r.isSale === c.expectSale && r.discountPercent === c.expectDiscount;
   console.log(`${ok ? '✓' : '✗'} ${c.name}`);
   console.log(
-    `  result: isSale=${r.isSale}, discount=${r.discountPercent}%, current=¥${r.currentPrice}, original=¥${r.originalPrice}`
+    `  result: isSale=${r.isSale}, discount=${r.discountPercent}%, current=${r.currencySymbol || ''}${r.currentPrice}, original=${r.currencySymbol || ''}${r.originalPrice}`
   );
   console.log(`  expect: isSale=${c.expectSale}, discount=${c.expectDiscount}%`);
   if (!ok) allOk = false;
